@@ -17,3 +17,8 @@ button:disabled { cursor: not-allowed; opacity: .45; }
   .primary { @apply rounded-xl bg-teal-300 px-5 py-3.5 text-sm font-semibold text-[#0b1424] hover:bg-teal-200; }
   .eyebrow { @apply text-[10px] font-semibold tracking-[0.2em] text-teal-300 sm:text-xs; }
 }
+
+progress { appearance: none; border: none; border-radius: 999px; overflow: hidden; background: #0b1424; }
+progress::-webkit-progress-bar { background: #0b1424; }
+progress::-webkit-progress-value { background: #5eead4; }
+progress::-moz-progress-bar { background: #5eead4; }

@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { emptyState, pause, resume, start, stop, type TimerState } from '@/lib/timer';
+import { emptyState, setSegment, pause, resume, start, stop, type Habit, type TimerState } from '@/lib/timer';
+import { saveHabit } from '@/lib/habits';
 import { loadState, saveState, STORAGE_KEY } from '@/lib/storage';
 export function useTimer() {
     const [state, setState] = useState<TimerState>(emptyState);
@@ -41,13 +42,18 @@ export function useTimer() {
             setState(next);
             setNow(time);
             setError('');
+            return true;
         }
         catch {
-            setError('Your change could not be saved. Check available browser storage and permissions, then try again.');
+            setError('Your change could not be saved. Use a unique habit name and a whole-minute goal from 1 to 1440; check browser storage permissions if the problem persists.');
+            return false;
         }
     }
     return { state, now, ready, error,
         start: (name: string) => update((current, time) => start(current, name, time, crypto.randomUUID())),
+        set: () => update(setSegment),
+        saveHabit: (habit: Habit) => update(current => saveHabit(current, habit)),
+        deleteHabit: (id: string) => update(current => ({ ...current, habits: current.habits.filter(habit => habit.id !== id) })),
         pause: () => update(pause), resume: () => update(resume), stop: () => update(stop),
         remove: (id: string) => update(current => ({ ...current, completed: current.completed.filter(session => session.id !== id) })),
     };

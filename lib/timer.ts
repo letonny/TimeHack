@@ -1,6 +1,5 @@
-// Each running interval is a segment. Future SET/break actions can close a
-// segment and start another without changing the session's identity.
 export type Segment = {
+    kind: 'study' | 'break';
     startedAt: number;
     endedAt: number | null;
 };
@@ -12,12 +11,14 @@ export type Session = {
     segments: Segment[];
 };
 export type TimerState = {
+    habits: Habit[];
     active: Session | null;
     completed: Session[];
 };
-export const emptyState = (): TimerState => ({ active: null, completed: [] });
+export type Habit = { id: string; name: string; goalMinutes: number };
+export const emptyState = (): TimerState => ({ active: null, completed: [], habits: [] });
 export function duration(session: Session, now: number): number {
-    return session.segments.reduce((total, segment) => total + Math.max(0, (segment.endedAt ?? now) - segment.startedAt), 0);
+    return session.segments.reduce((total, segment) => total + (segment.kind === 'break' ? 0 : segmentDuration(segment, now)), 0);
 }
 export function isRunning(session: Session): boolean {
     return session.segments.at(-1)?.endedAt === null;
@@ -25,7 +26,7 @@ export function isRunning(session: Session): boolean {
 export function start(state: TimerState, name: string, now: number, id: string): TimerState {
     if (state.active || !name.trim())
         return state;
-    return { ...state, active: { id, name: name.trim(), startedAt: now, endedAt: null, segments: [{ startedAt: now, endedAt: null }] } };
+    return { ...state, active: { id, name: name.trim(), startedAt: now, endedAt: null, segments: [{ kind: 'study', startedAt: now, endedAt: null }] } };
 }
 export function pause(state: TimerState, now: number): TimerState {
     if (!state.active || !isRunning(state.active))
@@ -36,13 +37,13 @@ export function resume(state: TimerState, now: number): TimerState {
     if (!state.active || isRunning(state.active))
         return state;
     const lastEnd = state.active.segments.at(-1)!.endedAt!;
-    return { ...state, active: { ...state.active, segments: [...state.active.segments, { startedAt: Math.max(now, lastEnd), endedAt: null }] } };
+    return { ...state, active: { ...state.active, segments: [...state.active.segments, { kind: state.active.segments.at(-1)!.kind, startedAt: Math.max(now, lastEnd), endedAt: null }] } };
 }
 export function stop(state: TimerState, now: number): TimerState {
     const closed = pause(state, now).active;
     if (!closed)
         return state;
-    return { active: null, completed: [{ ...closed, endedAt: Math.max(now, closed.segments.at(-1)!.endedAt!) }, ...state.completed] };
+    return { ...state, active: null, completed: [{ ...closed, endedAt: Math.max(now, closed.segments.at(-1)!.endedAt!) }, ...state.completed] };
 }
 export function todaySummary(state: TimerState, now: number) {
     const dayStart = new Date(now);
@@ -50,10 +51,22 @@ export function todaySummary(state: TimerState, now: number) {
     const dayEnd = new Date(dayStart);
     dayEnd.setDate(dayEnd.getDate() + 1);
     const sessions = [...state.completed, ...(state.active ? [state.active] : [])];
-    const milliseconds = sessions.reduce((total, session) => total + session.segments.reduce((sum, segment) => sum + Math.max(0, Math.min(segment.endedAt ?? now, dayEnd.getTime(), now) - Math.max(segment.startedAt, dayStart.getTime())), 0), 0);
+    const milliseconds = sessions.reduce((total, session) => total + session.segments.reduce((sum, segment) => sum + (segment.kind === 'break' ? 0 : Math.max(0, Math.min(segment.endedAt ?? now, dayEnd.getTime(), now) - Math.max(segment.startedAt, dayStart.getTime()))), 0), 0);
     return { milliseconds, count: state.completed.filter(session => session.endedAt! >= dayStart.getTime() && session.endedAt! < dayEnd.getTime()).length };
 }
 export function formatDuration(ms: number): string {
     const seconds = Math.floor(ms / 1000);
     return [Math.floor(seconds / 3600), Math.floor(seconds / 60) % 60, seconds % 60].map(value => String(value).padStart(2, '0')).join(':');
+}
+
+export function segmentDuration(segment: Segment, now: number): number {
+    return Math.max(0, (segment.endedAt ?? now) - segment.startedAt);
+}
+export function setSegment(state: TimerState, now: number): TimerState {
+    if (!state.active || !isRunning(state.active)) return state;
+    const closed = pause(state, now).active!;
+    const last = closed.segments.at(-1)!;
+    return { ...state, active: { ...closed, segments: [...closed.segments, {
+        kind: last.kind === 'study' ? 'break' : 'study', startedAt: last.endedAt!, endedAt: null,
+    }] } };
 }

@@ -1,8 +1,9 @@
+import { saveHabit } from './habits.ts';
 import { emptyState, type Session, type TimerState } from './timer.ts';
 export const STORAGE_KEY = 'timehack.sessions.v1';
 type StoragePort = Pick<Storage, 'getItem' | 'setItem'>;
 const timestamp = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value) && value >= 0;
-function validSession(value: unknown, active: boolean): value is Session {
+function validSession(value: unknown, active: boolean, legacy: boolean): value is Session {
     if (!value || typeof value !== 'object')
         return false;
     const s = value as Session;
@@ -10,7 +11,7 @@ function validSession(value: unknown, active: boolean): value is Session {
         return false;
     let previous = s.startedAt;
     return s.segments.every((segment, index) => {
-        if (!segment || !timestamp(segment.startedAt) || segment.startedAt < previous)
+        if (!segment || (!legacy && segment.kind !== 'study' && segment.kind !== 'break') || !timestamp(segment.startedAt) || segment.startedAt < previous)
             return false;
         if (segment.endedAt === null)
             return active && index === s.segments.length - 1;
@@ -25,13 +26,24 @@ export function loadState(storage: StoragePort): TimerState {
     if (!raw)
         return emptyState();
     const data = JSON.parse(raw);
-    if (data?.version !== 1 || !Array.isArray(data.completed) || !data.completed.every((s: unknown) => validSession(s, false)) || (data.active !== null && !validSession(data.active, true)))
+    if ((data?.version !== 1 && data?.version !== 2) || !Array.isArray(data.completed) || !data.completed.every((s: unknown) => validSession(s, false, data.version === 1)) || (data.active !== null && !validSession(data.active, true, data.version === 1)))
         throw new Error('Invalid saved session data');
     const ids = [...data.completed.map((s: Session) => s.id), ...(data.active ? [data.active.id] : [])];
     if (new Set(ids).size !== ids.length)
         throw new Error('Duplicate session IDs');
-    return { active: data.active, completed: data.completed };
+    const migrate = (session: Session): Session => ({ ...session, segments: session.segments.map(segment => ({ ...segment, kind: data.version === 1 ? 'study' : segment.kind })) });
+    let state: TimerState = { active: data.active ? migrate(data.active) : null, completed: data.completed.map(migrate), habits: [] };
+    if (data.version === 2) {
+        if (!Array.isArray(data.habits)) throw new Error('Invalid habits');
+        const habitIds = new Set<string>();
+        for (const habit of data.habits) {
+            if (!habit || typeof habit.id !== 'string' || typeof habit.name !== 'string' || habitIds.has(habit.id)) throw new Error('Invalid habit');
+            state = saveHabit(state, habit);
+            habitIds.add(habit.id);
+        }
+    }
+    return state;
 }
 export function saveState(storage: StoragePort, state: TimerState): void {
-    storage.setItem(STORAGE_KEY, JSON.stringify({ version: 1, ...state }));
+    storage.setItem(STORAGE_KEY, JSON.stringify({ version: 2, ...state }));
 }
