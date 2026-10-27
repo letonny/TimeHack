@@ -1,26 +1,19 @@
 @import "tailwindcss";
-
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
+:root { color-scheme: dark; --background: #0b1424; --foreground: #edf3fa; }
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: Arial, Helvetica, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+body { background: var(--background); color: var(--foreground); font-family: Arial, Helvetica, sans-serif; }
+button, a, input { -webkit-tap-highlight-color: transparent; }
+button { cursor: pointer; transition: background-color 150ms, color 150ms; }
+button:disabled { cursor: not-allowed; opacity: .45; }
+:focus-visible { outline: 2px solid #5eead4; outline-offset: 4px; }
+::selection { background: #5eead4; color: #0b1424; }
+@layer components {
+  .panel { @apply rounded-2xl border border-white/8 bg-[#111f33]; }
+  .primary { @apply rounded-xl bg-teal-300 px-5 py-3.5 text-sm font-semibold text-[#0b1424] hover:bg-teal-200; }
+  .eyebrow { @apply text-[10px] font-semibold tracking-[0.2em] text-teal-300 sm:text-xs; }
 }
