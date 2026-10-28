@@ -4,9 +4,11 @@ import { habitGoalProgress, habitGoalStreaks } from '@/lib/analytics';
 import type { Habit, TimerState } from '@/lib/timer';
 import { ProgressRing } from './progress-ring';
 import { activityForName, iconGlyph } from '@/lib/activity-metadata';
-export function HabitTracker({ state, now, ready, onSave, onDelete, onTrack }: {
+import { ReminderSettings } from './reminder-settings';
+export function HabitTracker({ state, now, ready, onSave, onDelete, onTrack, onSaveReminder, onDeleteReminder }: {
     state: TimerState; now: number | null; ready: boolean;
     onSave: (habit: Habit) => boolean | undefined; onDelete: (id: string) => void; onTrack: (name: string) => void;
+    onSaveReminder: Parameters<typeof ReminderSettings>[0]['onSave']; onDeleteReminder: Parameters<typeof ReminderSettings>[0]['onDelete'];
 }) {
     const [editing, setEditing] = useState<string | null>(null);
     const [name, setName] = useState('');
@@ -26,10 +28,12 @@ export function HabitTracker({ state, now, ready, onSave, onDelete, onTrack }: {
             const progress = habitGoalProgress(state, habit, now ?? 0);
             const streaks = habitGoalStreaks(state, habit, now ?? 0);
             const activity = activityForName(state, habit.name);
+            const reminder = state.reminders.find(item => item.habitId === habit.id);
             return <li key={habit.id} className="min-w-0 rounded-xl border border-white/10 p-4">
                 <div className="flex items-center gap-4"><ProgressRing progress={progress} label={`${habit.name} daily progress`} size={104} color={activity.color}/><div className="min-w-0"><h3 className="break-words font-medium"><span aria-hidden="true" className="mr-2">{iconGlyph(activity.icon)}</span>{habit.name}</h3><p className="mt-2 text-sm text-slate-300">{progress.minutes.toFixed(1)} / {habit.goalMinutes} minutes</p><p className="mt-1 text-xs text-slate-400">{progress.remainingMinutes > 0 ? `${progress.remainingMinutes.toFixed(1)} remaining` : `${Math.max(0, progress.minutes - habit.goalMinutes).toFixed(1)} above goal`}</p></div></div>
                 <div className="mt-4 grid grid-cols-2 gap-2 text-xs"><p className="rounded-lg bg-white/5 p-2 text-slate-400">Current goal streak<br/><span className="mt-1 inline-block text-base font-medium text-teal-200">{streaks.current} days</span></p><p className="rounded-lg bg-white/5 p-2 text-slate-400">Longest goal streak<br/><span className="mt-1 inline-block text-base font-medium text-white">{streaks.longest} days</span></p></div>
                 <div className="mt-3 flex flex-wrap gap-2 text-sm"><button disabled={!ready || !!state.active} type="button" onClick={() => onTrack(habit.name)} className="rounded-lg bg-teal-300/10 px-3 py-2 text-teal-200">Track</button><button disabled={!ready} type="button" onClick={() => { setEditing(habit.id); setName(habit.name); setGoal(String(habit.goalMinutes)); }} className="px-3 py-2">Edit</button><button disabled={!ready} type="button" onClick={() => { onDelete(habit.id); if (editing === habit.id) reset(); }} className="px-3 py-2 text-slate-400">Delete</button></div>
+                <ReminderSettings key={reminder ? JSON.stringify(reminder) : 'none'} habitId={habit.id} reminder={reminder} ready={ready} onSave={onSaveReminder} onDelete={onDeleteReminder}/>
             </li>;
         })}</ul>
     </section>;

@@ -69,7 +69,7 @@ export function Dashboard() {
 
       {recentSession && <section className="panel mt-5 p-5 sm:p-8" aria-label="Most recently completed session"><div className="flex justify-end"><button type="button" onClick={() => setRecentSessionId(null)} className="rounded-lg px-2 py-1 text-xs text-slate-500 hover:bg-white/5 hover:text-white">Dismiss</button></div><SessionReport session={recentSession} now={recentSession.endedAt ?? timer.now ?? 0}/></section>}
 
-      <HabitTracker state={timer.state} now={timer.now} ready={timer.ready} onSave={timer.saveHabit} onDelete={timer.deleteHabit} onTrack={timer.start}/>
+      <HabitTracker state={timer.state} now={timer.now} ready={timer.ready} onSave={timer.saveHabit} onDelete={timer.deleteHabit} onTrack={timer.start} onSaveReminder={timer.saveReminder} onDeleteReminder={timer.deleteReminder}/>
       {timer.now !== null && <ActivityCalendar state={timer.state} now={timer.now} selectedDay={selectedDay ?? undefined} onSelectDay={setSelectedDay}/>}
       {timer.now !== null && <DailyTimeline state={timer.state} now={timer.now} dayKey={selectedDay ?? localDayKey(timer.now)} onSelectDay={setSelectedDay} onSave={timer.updateSession}/>}
       {timer.now !== null && <ActivityHistory state={timer.state} now={timer.now} onDelete={timer.remove} onSave={timer.updateSession}/>}

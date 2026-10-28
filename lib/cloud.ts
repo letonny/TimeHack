@@ -1,9 +1,10 @@
-import { emptyState, type Activity, type Habit, type Profile, type Session, type TimerState } from './timer.ts';
+import { emptyState, type Activity, type Habit, type HabitReminder, type Profile, type Session, type TimerState, type Weekday } from './timer.ts';
+import { validateReminder } from './reminders.ts';
 
 export type Change = {
-  eventId: string; entityType: 'habit' | 'session' | 'activity' | 'profile'; entityId: string;
+  eventId: string; entityType: 'habit' | 'session' | 'activity' | 'profile' | 'reminder'; entityId: string;
   action: 'save' | 'delete' | 'import'; expectedRevision: number;
-  payload: Habit | Session | Activity | Profile | Record<string, never>; occurredAt: string;
+  payload: Habit | Session | Activity | Profile | HabitReminder | Record<string, never>; occurredAt: string;
 };
 export type CloudCache = { version: 1; userId: string; state: TimerState; revisions: Record<string, number>; queue: Change[] };
 export const cloudKey = (userId: string) => `timehack.cloud.v1.${userId}`;
@@ -17,6 +18,9 @@ export function readCache(storage: Pick<Storage, 'getItem'>, userId: string): Cl
   if (parsed.version !== 1 || parsed.userId !== userId || !parsed.state || !Array.isArray(parsed.queue) || !parsed.revisions)
     throw new Error('Invalid account cache');
   parsed.state.activities ??= [];
+  parsed.state.reminders ??= [];
+  if (!Array.isArray(parsed.state.reminders)) throw new Error('Invalid reminder cache');
+  parsed.state.reminders = parsed.state.reminders.map(validateReminder);
   parsed.state.profile ??= { displayName: '' };
   parsed.state.completed = parsed.state.completed.map(session => ({ entryType: 'timer', localDate: null, durationMilliseconds: null, activityId: null, note: '', ...session }));
   if (parsed.state.active) parsed.state.active = { entryType: 'timer', localDate: null, durationMilliseconds: null, activityId: null, note: '', ...parsed.state.active };
@@ -37,8 +41,9 @@ type ManualDurationRow = { user_id: string; id: string; name: string; local_date
 type SegmentRow = { user_id: string; session_id: string; position: number; kind: 'study' | 'break'; started_at: string; ended_at: string | null };
 type ActivityRow = { user_id: string; id: string; name: string; icon: string; color: string; revision: number; deleted_at: string | null };
 type ProfileRow = { user_id: string; display_name: string; revision: number };
-export function mapRows(userId: string, habits: HabitRow[], sessions: SessionRow[], segments: SegmentRow[], activities: ActivityRow[] = [], profiles: ProfileRow[] = [], manualDurations: ManualDurationRow[] = []): Pick<CloudCache, 'state' | 'revisions'> {
-  if ([...habits, ...sessions, ...segments, ...activities, ...profiles, ...manualDurations].some(row => row.user_id !== userId)) throw new Error('Account data mismatch');
+type ReminderRow = { user_id: string; habit_id: string; enabled: boolean; local_time: string; time_zone: string; weekday_mask: number; skip_if_goal_complete: boolean; revision: number; deleted_at: string | null };
+export function mapRows(userId: string, habits: HabitRow[], sessions: SessionRow[], segments: SegmentRow[], activities: ActivityRow[] = [], profiles: ProfileRow[] = [], manualDurations: ManualDurationRow[] = [], reminders: ReminderRow[] = []): Pick<CloudCache, 'state' | 'revisions'> {
+  if ([...habits, ...sessions, ...segments, ...activities, ...profiles, ...manualDurations, ...reminders].some(row => row.user_id !== userId)) throw new Error('Account data mismatch');
   const revisions: Record<string, number> = {};
   const state = emptyState();
   for (const row of habits) {
@@ -75,6 +80,14 @@ export function mapRows(userId: string, habits: HabitRow[], sessions: SessionRow
     state.completed.push({ id: row.id, name: row.name, startedAt: null, endedAt: null, segments: [],
       entryType: 'manual_duration', localDate: row.local_date, durationMilliseconds: Number(row.duration_milliseconds),
       activityId: row.activity_id, note: row.note });
+  }
+  for (const row of reminders) {
+    revisions[revisionKey('reminder', row.habit_id)] = row.revision;
+    if (row.deleted_at) continue;
+    const weekdays = ([1, 2, 3, 4, 5, 6, 7] as Weekday[]).filter(day => (row.weekday_mask & (1 << (day - 1))) !== 0);
+    state.reminders.push({ habitId: row.habit_id, enabled: row.enabled,
+      localTime: row.local_time.slice(0, 5), timeZone: row.time_zone, weekdays,
+      skipIfGoalComplete: row.skip_if_goal_complete });
   }
   const order = (session: Session) => session.endedAt ?? (session.localDate ? new Date(`${session.localDate}T23:59:59`).getTime() : 0);
   state.completed.sort((a, b) => order(b) - order(a));

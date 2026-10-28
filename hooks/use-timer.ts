@@ -1,10 +1,11 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { emptyState, setSegment, pause, resume, start, stop, type Activity, type Habit, type Profile, type Session, type TimerState } from '@/lib/timer';
+import { emptyState, setSegment, pause, resume, start, stop, type Activity, type Habit, type HabitReminder, type Profile, type Session, type TimerState } from '@/lib/timer';
 import { saveHabit } from '@/lib/habits';
 import { activityForName, saveActivity } from '@/lib/activity-metadata';
 import { validateDisplayName } from '@/lib/personalization';
+import { deleteReminder as removeReminderFromState, saveReminder as saveReminderInState } from '@/lib/reminders';
 import { removeCompletedSession, replaceCompletedSession } from '@/lib/session-actions';
 import { loadState, STORAGE_KEY } from '@/lib/storage';
 import { createClient } from '@/lib/supabase/client';
@@ -198,7 +199,18 @@ export function useTimer() {
     logManual: (session: Session) => { const cache = cacheRef.current; if (!cache || cache.state.active?.id === session.id || cache.state.completed.some(item => item.id === session.id)) return false; return commit({ ...cache.state, completed: [session, ...cache.state.completed] }, 'session', session.id, 'save', session); },
     updateSession: (session: Session) => { try { const cache = cacheRef.current; if (!cache) return false; return commit(replaceCompletedSession(cache.state, session), 'session', session.id, 'save', session); } catch { return false; } },
     saveHabit: (habit: Habit) => { try { const cache = cacheRef.current; if (!cache) return false; const next = saveHabit(cache.state, habit); return commit(next, 'habit', habit.id, 'save', next.habits.find(item => item.id === habit.id)!); } catch (cause) { setError(cause instanceof Error ? cause.message : 'Invalid habit'); return false; } },
-    deleteHabit: (id: string) => { const cache = cacheRef.current; if (cache?.state.habits.some(item => item.id === id)) commit({ ...cache.state, habits: cache.state.habits.filter(item => item.id !== id) }, 'habit', id, 'delete', {}); },
+    deleteHabit: (id: string) => {
+      let cache = cacheRef.current;
+      if (!cache?.state.habits.some(item => item.id === id)) return;
+      if (cache.state.reminders.some(item => item.habitId === id)) {
+        if (!commit(removeReminderFromState(cache.state, id), 'reminder', id, 'delete', {})) return;
+        cache = cacheRef.current;
+      }
+      if (cache?.state.habits.some(item => item.id === id))
+        commit({ ...cache.state, habits: cache.state.habits.filter(item => item.id !== id) }, 'habit', id, 'delete', {});
+    },
+    saveReminder: (reminder: HabitReminder) => { try { const cache = cacheRef.current; if (!cache) return false; const next = saveReminderInState(cache.state, reminder); return commit(next, 'reminder', reminder.habitId, 'save', next.reminders.find(item => item.habitId === reminder.habitId)!); } catch (cause) { setError(cause instanceof Error ? cause.message : 'Invalid reminder'); return false; } },
+    deleteReminder: (habitId: string) => { const cache = cacheRef.current; if (cache?.state.reminders.some(item => item.habitId === habitId)) return commit(removeReminderFromState(cache.state, habitId), 'reminder', habitId, 'delete', {}); return false; },
     saveActivity: (activity: Activity) => { try { const cache = cacheRef.current; if (!cache) return false; const next = saveActivity(cache.state, activity); return commit(next, 'activity', activity.id, 'save', next.activities.find(item => item.id === activity.id)!); } catch (cause) { setError(cause instanceof Error ? cause.message : 'Invalid activity'); return false; } },
     deleteActivity: (id: string) => { const cache = cacheRef.current; if (cache?.state.activities.some(item => item.id === id)) return commit({ ...cache.state, activities: cache.state.activities.filter(item => item.id !== id) }, 'activity', id, 'delete', {}); return false; },
     saveProfile: (profile: Profile) => { try { const cache = cacheRef.current, userId = userRef.current; if (!cache || !userId) return false; const nextProfile = { displayName: validateDisplayName(profile.displayName) }; return commit({ ...cache.state, profile: nextProfile }, 'profile', userId, 'save', nextProfile); } catch (cause) { setError(cause instanceof Error ? cause.message : 'Invalid profile'); return false; } },

@@ -17,8 +17,18 @@ export type Session = {
 };
 export type Activity = { id: string; name: string; icon: string; color: string };
 export type Profile = { displayName: string };
+export type Weekday = 1 | 2 | 3 | 4 | 5 | 6 | 7;
+export type HabitReminder = {
+    habitId: string;
+    enabled: boolean;
+    localTime: string;
+    timeZone: string;
+    weekdays: Weekday[];
+    skipIfGoalComplete: boolean;
+};
 export type TimerState = {
     habits: Habit[];
+    reminders: HabitReminder[];
     activities: Activity[];
     profile: Profile;
     active: Session | null;
@@ -40,7 +50,7 @@ export type SessionSummary = {
     breakCount: number;
     intervals: SessionInterval[];
 };
-export const emptyState = (): TimerState => ({ active: null, completed: [], habits: [], activities: [], profile: { displayName: '' } });
+export const emptyState = (): TimerState => ({ active: null, completed: [], habits: [], reminders: [], activities: [], profile: { displayName: '' } });
 export function isDurationOnly(session: Session): boolean {
     return session.entryType === 'manual_duration';
 }

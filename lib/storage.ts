@@ -32,7 +32,7 @@ export function loadState(storage: StoragePort): TimerState {
     if (new Set(ids).size !== ids.length)
         throw new Error('Duplicate session IDs');
     const migrate = (session: Session): Session => ({ ...session, entryType: 'timer', localDate: null, durationMilliseconds: null, activityId: null, note: '', segments: session.segments.map(segment => ({ ...segment, kind: data.version === 1 ? 'study' : segment.kind })) });
-    let state: TimerState = { active: data.active ? migrate(data.active) : null, completed: data.completed.map(migrate), habits: [], activities: [], profile: { displayName: '' } };
+    let state: TimerState = { active: data.active ? migrate(data.active) : null, completed: data.completed.map(migrate), habits: [], reminders: [], activities: [], profile: { displayName: '' } };
     if (data.version === 2) {
         if (!Array.isArray(data.habits)) throw new Error('Invalid habits');
         const habitIds = new Set<string>();
