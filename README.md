@@ -1,6 +1,6 @@
 # TimeHack
 
-A personal time-tracking dashboard built with Next.js, TypeScript, Tailwind CSS, and Supabase. Track daily habits and activities with start, SET study/break transitions, pause/resume, and Finish controls. Review total tracked time and individual session intervals across devices.
+A personal time-tracking dashboard built with Next.js, TypeScript, Tailwind CSS, and Supabase. Track with the live SET study/break timer or reviewed manual entries, organize reusable activities, and inspect daily timelines and session reports across devices.
 
 ## Development
 
@@ -51,6 +51,8 @@ Tests cover SET transitions, study/break durations, pause/resume, local-day prog
 - `tests/`: Node test runner tests with an in-memory storage adapter.
 
 Sessions contain timestamped study and break segments. SET closes the current segment and starts the opposite mode within the same session. Pause closes the current segment; resume opens another in the same mode. SET is disabled while paused. Finish saves the session even while paused or on break. Total tracked time includes study and recorded breaks while excluding pauses. Habit and calendar study/focus totals exclude breaks and clip intervals at local midnight.
+
+Milestone 3D adds an optional display name, reusable activity icons/colors, notes, editable completed sessions, timestamped manual ranges, and duration-only entries. Duration-only records store a local calendar date and exact duration without fake timestamps; they appear under “Unscheduled / Time not specified” and are not positioned on the chronological day ring. Apply the reviewable Milestone 3D migration before running this client against a cloud project.
 
 Habits have unique names (ignoring case and surrounding spaces) and whole-minute daily goals from 1 to 1440. Use Track on a habit or enter its name in the timer to match it. Progress derives from matching activity records, including the active study segment; editing a goal recalculates progress immediately. Renaming a habit matches activities with the new name. Deleting a habit keeps its activity history; deleting an activity removes its contribution to progress. Goals reset at local midnight without deleting history. Progress is capped at 100%, while completed minutes may exceed the goal.
 

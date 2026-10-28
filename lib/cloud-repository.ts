@@ -1,11 +1,11 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { mapRows, type Change } from './cloud.ts';
 
-async function allRows(client: SupabaseClient, table: 'habits' | 'activity_sessions' | 'session_segments', userId: string) {
+async function allRows(client: SupabaseClient, table: 'habits' | 'activity_sessions' | 'session_segments' | 'activities' | 'user_profiles' | 'manual_duration_entries', userId: string) {
   const rows: Record<string, unknown>[] = [];
   for (let offset = 0; ; offset += 500) {
     let query = client.from(table).select('*').eq('user_id', userId)
-      .order(table === 'session_segments' ? 'session_id' : 'id');
+      .order(table === 'session_segments' ? 'session_id' : table === 'user_profiles' ? 'user_id' : 'id');
     if (table === 'session_segments') query = query.order('position');
     const { data, error } = await query.range(offset, offset + 499);
     if (error) throw error;
@@ -15,10 +15,10 @@ async function allRows(client: SupabaseClient, table: 'habits' | 'activity_sessi
   return rows;
 }
 export async function fetchCloud(client: SupabaseClient, userId: string) {
-  const [habits, sessions, segments] = await Promise.all([
-    allRows(client, 'habits', userId), allRows(client, 'activity_sessions', userId), allRows(client, 'session_segments', userId),
+  const [habits, sessions, segments, activities, profiles, manualDurations] = await Promise.all([
+    allRows(client, 'habits', userId), allRows(client, 'activity_sessions', userId), allRows(client, 'session_segments', userId), allRows(client, 'activities', userId), allRows(client, 'user_profiles', userId), allRows(client, 'manual_duration_entries', userId),
   ]);
-  return mapRows(userId, habits as Parameters<typeof mapRows>[1], sessions as Parameters<typeof mapRows>[2], segments as Parameters<typeof mapRows>[3]);
+  return mapRows(userId, habits as Parameters<typeof mapRows>[1], sessions as Parameters<typeof mapRows>[2], segments as Parameters<typeof mapRows>[3], activities as Parameters<typeof mapRows>[4], profiles as Parameters<typeof mapRows>[5], manualDurations as Parameters<typeof mapRows>[6]);
 }
 export async function applyChange(client: SupabaseClient, change: Change): Promise<number> {
   const { data, error } = await client.rpc('apply_timehack_change', {

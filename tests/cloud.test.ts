@@ -3,7 +3,7 @@ import test from 'node:test';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { canOfferImport, cloudKey, LEGACY_CLAIM_KEY, mapRows, newCache, nextChange, readCache, revisionKey, writeCache } from '../lib/cloud.ts';
-import { duration, todaySummary } from '../lib/timer.ts';
+import { duration, emptyState, todaySummary } from '../lib/timer.ts';
 import { loadState, saveState, STORAGE_KEY } from '../lib/storage.ts';
 
 function memory() {
@@ -47,7 +47,7 @@ test('per-user cache and pending event IDs survive refresh without exposing the 
   assert.equal(readCache(storage, 'alice')?.queue[1].expectedRevision, 1);
   assert.equal(readCache(storage, 'bob'), null);
   assert.notEqual(cloudKey('alice'), cloudKey('bob'));
-  saveState(storage, { habits: [], active: null, completed: [] });
+  saveState(storage, emptyState());
   assert.equal(loadState(storage).completed.length, 0);
   assert.ok(storage.getItem(STORAGE_KEY));
 });

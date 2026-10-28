@@ -6,6 +6,7 @@ import {
   localDayKey, localDayStart,
 } from '@/lib/analytics';
 import type { TimerState } from '@/lib/timer';
+import { activityForName, activityForSession, iconGlyph } from '@/lib/activity-metadata';
 
 const levels = ['bg-white/5', 'bg-teal-950', 'bg-teal-800', 'bg-teal-500', 'bg-teal-300'];
 const levelForMinutes = (minutes: number) => minutes === 0 ? 0 : minutes < 15 ? 1 : minutes < 30 ? 2 : minutes < 60 ? 3 : 4;
@@ -19,11 +20,11 @@ function calendarDays(now: number) {
   return Array.from({ length: 52 }, (_, week) => Array.from({ length: 7 }, (_, day) => addLocalDays(start, week * 7 + day)));
 }
 
-export function ActivityCalendar({ state, now }: { state: TimerState; now: number }) {
+export function ActivityCalendar({ state, now, selectedDay: controlledDay, onSelectDay }: { state: TimerState; now: number; selectedDay?: string; onSelectDay?: (dayKey: string) => void }) {
   const [filter, setFilter] = useState('');
   const [chosenDay, setChosenDay] = useState<string | null>(null);
   const today = localDayKey(now);
-  const selectedDay = chosenDay ?? today;
+  const selectedDay = controlledDay ?? chosenDay ?? today;
   const weeks = useMemo(() => calendarDays(now), [now]);
   const totals = useMemo(() => dailyActivity(state, now, filter || undefined), [state, now, filter]);
   const history = useMemo(() => activityHistoryForDay(state, selectedDay, now, filter || undefined), [state, selectedDay, now, filter]);
@@ -59,7 +60,7 @@ export function ActivityCalendar({ state, now }: { state: TimerState; now: numbe
             const minutes = (totals.get(dayKey)?.milliseconds ?? 0) / 60000;
             const dateLabel = new Date(localDayStart(dayKey)).toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
             const description = `${dateLabel}: ${formatMinutes(minutes)} of study or focus activity${filter ? ` for ${filter}` : ''}`;
-            return <button key={dayKey} type="button" disabled={isFuture} onClick={() => setChosenDay(dayKey)} aria-label={description} aria-pressed={selectedDay === dayKey} title={description} className={`aspect-square min-h-3 rounded-[3px] border ${selectedDay === dayKey ? 'border-white ring-1 ring-teal-200' : 'border-white/5'} ${isFuture ? 'bg-transparent' : levels[levelForMinutes(minutes)]}`} />;
+            return <button key={dayKey} type="button" disabled={isFuture} onClick={() => { setChosenDay(dayKey); onSelectDay?.(dayKey); }} aria-label={description} aria-pressed={selectedDay === dayKey} title={description} className={`aspect-square min-h-3 rounded-[3px] border ${selectedDay === dayKey ? 'border-white ring-1 ring-teal-200' : 'border-white/5'} ${isFuture ? 'bg-transparent' : levels[levelForMinutes(minutes)]}`} />;
           })}</div>)}</div>
         </div>
       </div>
@@ -69,7 +70,7 @@ export function ActivityCalendar({ state, now }: { state: TimerState; now: numbe
     </div>
     <div className="mt-6 border-t border-white/8 pt-6">
       <div className="flex flex-wrap items-baseline justify-between gap-2"><div><h3 className="font-medium">{selectedLabel}</h3><p className="mt-1 text-sm text-slate-400">{filter || 'All activities'}</p></div><p className="font-mono text-lg text-teal-200">{formatMinutes(selectedMinutes)}</p></div>
-      {!history.length ? <p className="mt-5 rounded-xl bg-white/[.025] p-4 text-sm text-slate-400">No study or focus activity logged for this day.</p> : <ul className="mt-4 divide-y divide-white/8">{history.map(item => <li key={item.sessionId} className="flex items-center justify-between gap-4 py-3"><div className="min-w-0"><p className="truncate text-sm font-medium">{item.name}</p><p className="mt-1 text-xs text-slate-500">{new Date(item.startedAt).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</p></div><span className="shrink-0 text-sm text-slate-300">{formatMinutes(item.milliseconds / 60000)}</span></li>)}</ul>}
+      {!history.length ? <p className="mt-5 rounded-xl bg-white/[.025] p-4 text-sm text-slate-400">No study or focus activity logged for this day.</p> : <ul className="mt-4 divide-y divide-white/8">{history.map(item => { const session = [...state.completed, ...(state.active ? [state.active] : [])].find(candidate => candidate.id === item.sessionId); const activity = session ? activityForSession(state, session) : activityForName(state, item.name); return <li key={item.sessionId} className="flex items-center justify-between gap-4 py-3"><span aria-hidden="true" className="flex size-8 items-center justify-center rounded-lg text-xs text-slate-950" style={{ backgroundColor: activity.color }}>{iconGlyph(activity.icon)}</span><div className="min-w-0 flex-1"><p className="truncate text-sm font-medium">{item.name}</p><p className="mt-1 text-xs text-slate-500">{item.startedAt === null ? 'Time not specified' : new Date(item.startedAt).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</p></div><span className="shrink-0 text-sm text-slate-300">{formatMinutes(item.milliseconds / 60000)}</span></li>; })}</ul>}
     </div>
   </section>;
 }

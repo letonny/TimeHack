@@ -47,7 +47,7 @@ test('current streak survives an incomplete today but stops after a missed yeste
 
 test('habit goal streak requires goal minutes and allows today to remain incomplete', () => {
   const habit = { id: 'h', name: 'Study', goalMinutes: 30 };
-  const state: TimerState = { habits: [habit], active: null, completed: [
+  const state: TimerState = { ...emptyState(), habits: [habit], active: null, completed: [
     session('a', 'Study', [{ kind: 'study', startedAt: at(2026, 10, 26, 9), endedAt: at(2026, 10, 26, 9, 30) }]),
     session('b', 'study', [{ kind: 'study', startedAt: at(2026, 10, 27, 9), endedAt: at(2026, 10, 27, 9, 45) }]),
     session('c', 'Study', [{ kind: 'study', startedAt: at(2026, 10, 28, 9), endedAt: at(2026, 10, 28, 9, 10) }]),

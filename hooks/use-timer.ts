@@ -1,12 +1,15 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { emptyState, setSegment, pause, resume, start, stop, type Habit, type Session, type TimerState } from '@/lib/timer';
+import { emptyState, setSegment, pause, resume, start, stop, type Activity, type Habit, type Profile, type Session, type TimerState } from '@/lib/timer';
 import { saveHabit } from '@/lib/habits';
+import { activityForName, saveActivity } from '@/lib/activity-metadata';
+import { validateDisplayName } from '@/lib/personalization';
+import { removeCompletedSession, replaceCompletedSession } from '@/lib/session-actions';
 import { loadState, STORAGE_KEY } from '@/lib/storage';
 import { createClient } from '@/lib/supabase/client';
 import { applyChange, fetchCloud } from '@/lib/cloud-repository';
-import { canOfferImport, cloudKey, LEGACY_CLAIM_KEY, newCache, nextChange, readCache, revisionKey, writeCache, type CloudCache } from '@/lib/cloud';
+import { canOfferImport, cloudKey, LEGACY_CLAIM_KEY, newCache, nextChange, readCache, revisionKey, writeCache, type Change, type CloudCache } from '@/lib/cloud';
 
 export function useTimer() {
   const [state, setState] = useState<TimerState>(emptyState);
@@ -111,7 +114,7 @@ export function useTimer() {
     return () => { mounted = false; clearInterval(clock); clearInterval(interval); window.removeEventListener('storage', storage); document.removeEventListener('visibilitychange', visible); listener.subscription.unsubscribe(); };
   }, []);
 
-  function commit(next: TimerState, entityType: 'habit' | 'session', entityId: string, action: 'save' | 'delete', payload: Habit | Session | Record<string, never>) {
+  function commit(next: TimerState, entityType: Change['entityType'], entityId: string, action: 'save' | 'delete', payload: Change['payload']) {
     const cache = cacheRef.current;
     if (!ready || !cache || conflictRef.current || cache.userId !== userRef.current) return false;
     try {
@@ -189,10 +192,16 @@ export function useTimer() {
   return { state, now, ready: ready && !conflict, error, syncError, syncing, pending, legacyAvailable, legacyPreview, conflict,
     retry: () => { if (!userRef.current) window.location.reload(); else { conflictRef.current = false; setConflict(false); void syncRef.current(); } },
     previewLegacy, importLegacy, useCloudVersion,
-    start: (name: string) => { const id = crypto.randomUUID(); return sessionUpdate((current, time) => start(current, name, time, id), id); },
-    set: () => sessionUpdate(setSegment), pause: () => sessionUpdate(pause), resume: () => sessionUpdate(resume), stop: () => sessionUpdate(stop),
+    start: (name: string) => { const id = crypto.randomUUID(); return sessionUpdate((current, time) => { const activity = activityForName(current, name); return start(current, name, time, id, activity.id || null); }, id); },
+    set: () => sessionUpdate(setSegment), pause: () => sessionUpdate(pause), resume: () => sessionUpdate(resume),
+    stop: (note = '') => sessionUpdate((current, time) => { const next = stop(current, time); if (next === current || !next.completed[0]) return next; return { ...next, completed: [{ ...next.completed[0], note: note.trim().slice(0, 2000) }, ...next.completed.slice(1)] }; }),
+    logManual: (session: Session) => { const cache = cacheRef.current; if (!cache || cache.state.active?.id === session.id || cache.state.completed.some(item => item.id === session.id)) return false; return commit({ ...cache.state, completed: [session, ...cache.state.completed] }, 'session', session.id, 'save', session); },
+    updateSession: (session: Session) => { try { const cache = cacheRef.current; if (!cache) return false; return commit(replaceCompletedSession(cache.state, session), 'session', session.id, 'save', session); } catch { return false; } },
     saveHabit: (habit: Habit) => { try { const cache = cacheRef.current; if (!cache) return false; const next = saveHabit(cache.state, habit); return commit(next, 'habit', habit.id, 'save', next.habits.find(item => item.id === habit.id)!); } catch (cause) { setError(cause instanceof Error ? cause.message : 'Invalid habit'); return false; } },
     deleteHabit: (id: string) => { const cache = cacheRef.current; if (cache?.state.habits.some(item => item.id === id)) commit({ ...cache.state, habits: cache.state.habits.filter(item => item.id !== id) }, 'habit', id, 'delete', {}); },
-    remove: (id: string) => { const cache = cacheRef.current; if (cache?.state.completed.some(item => item.id === id)) commit({ ...cache.state, completed: cache.state.completed.filter(item => item.id !== id) }, 'session', id, 'delete', {}); },
+    saveActivity: (activity: Activity) => { try { const cache = cacheRef.current; if (!cache) return false; const next = saveActivity(cache.state, activity); return commit(next, 'activity', activity.id, 'save', next.activities.find(item => item.id === activity.id)!); } catch (cause) { setError(cause instanceof Error ? cause.message : 'Invalid activity'); return false; } },
+    deleteActivity: (id: string) => { const cache = cacheRef.current; if (cache?.state.activities.some(item => item.id === id)) return commit({ ...cache.state, activities: cache.state.activities.filter(item => item.id !== id) }, 'activity', id, 'delete', {}); return false; },
+    saveProfile: (profile: Profile) => { try { const cache = cacheRef.current, userId = userRef.current; if (!cache || !userId) return false; const nextProfile = { displayName: validateDisplayName(profile.displayName) }; return commit({ ...cache.state, profile: nextProfile }, 'profile', userId, 'save', nextProfile); } catch (cause) { setError(cause instanceof Error ? cause.message : 'Invalid profile'); return false; } },
+    remove: (id: string) => { const cache = cacheRef.current; if (cache?.state.completed.some(item => item.id === id)) commit(removeCompletedSession(cache.state, id), 'session', id, 'delete', {}); },
   };
 }

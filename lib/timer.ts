@@ -6,12 +6,21 @@ export type Segment = {
 export type Session = {
     id: string;
     name: string;
-    startedAt: number;
+    startedAt: number | null;
     endedAt: number | null;
     segments: Segment[];
+    entryType?: 'timer' | 'manual_range' | 'manual_duration';
+    localDate?: string | null;
+    durationMilliseconds?: number | null;
+    activityId?: string | null;
+    note?: string;
 };
+export type Activity = { id: string; name: string; icon: string; color: string };
+export type Profile = { displayName: string };
 export type TimerState = {
     habits: Habit[];
+    activities: Activity[];
+    profile: Profile;
     active: Session | null;
     completed: Session[];
 };
@@ -31,23 +40,29 @@ export type SessionSummary = {
     breakCount: number;
     intervals: SessionInterval[];
 };
-export const emptyState = (): TimerState => ({ active: null, completed: [], habits: [] });
+export const emptyState = (): TimerState => ({ active: null, completed: [], habits: [], activities: [], profile: { displayName: '' } });
+export function isDurationOnly(session: Session): boolean {
+    return session.entryType === 'manual_duration';
+}
 export function duration(session: Session, now: number): number {
+    if (isDurationOnly(session)) return session.durationMilliseconds ?? 0;
     return session.segments.reduce((total, segment) => total + (segment.kind === 'break' ? 0 : segmentDuration(segment, now)), 0);
 }
 export function durationByKind(session: Session, now: number, kind: Segment['kind']): number {
+    if (isDurationOnly(session)) return kind === 'study' ? session.durationMilliseconds ?? 0 : 0;
     return session.segments.reduce((total, segment) => total + (segment.kind === kind ? segmentDuration(segment, now) : 0), 0);
 }
 export function trackedDuration(session: Session, now: number): number {
+    if (isDurationOnly(session)) return session.durationMilliseconds ?? 0;
     return session.segments.reduce((total, segment) => total + segmentDuration(segment, now), 0);
 }
 export function isRunning(session: Session): boolean {
     return session.segments.at(-1)?.endedAt === null;
 }
-export function start(state: TimerState, name: string, now: number, id: string): TimerState {
+export function start(state: TimerState, name: string, now: number, id: string, activityId: string | null = null): TimerState {
     if (state.active || !name.trim())
         return state;
-    return { ...state, active: { id, name: name.trim(), startedAt: now, endedAt: null, segments: [{ kind: 'study', startedAt: now, endedAt: null }] } };
+    return { ...state, active: { id, name: name.trim(), startedAt: now, endedAt: null, segments: [{ kind: 'study', startedAt: now, endedAt: null }], entryType: 'timer', localDate: null, durationMilliseconds: null, activityId, note: '' } };
 }
 export function pause(state: TimerState, now: number): TimerState {
     if (!state.active || !isRunning(state.active))
@@ -72,8 +87,11 @@ export function todaySummary(state: TimerState, now: number) {
     const dayEnd = new Date(dayStart);
     dayEnd.setDate(dayEnd.getDate() + 1);
     const sessions = [...state.completed, ...(state.active ? [state.active] : [])];
-    const milliseconds = sessions.reduce((total, session) => total + session.segments.reduce((sum, segment) => sum + (segment.kind === 'break' ? 0 : Math.max(0, Math.min(segment.endedAt ?? now, dayEnd.getTime(), now) - Math.max(segment.startedAt, dayStart.getTime()))), 0), 0);
-    return { milliseconds, count: state.completed.filter(session => session.endedAt! >= dayStart.getTime() && session.endedAt! < dayEnd.getTime()).length };
+    const dayKey = `${dayStart.getFullYear()}-${String(dayStart.getMonth() + 1).padStart(2, '0')}-${String(dayStart.getDate()).padStart(2, '0')}`;
+    const milliseconds = sessions.reduce((total, session) => total + (isDurationOnly(session)
+        ? session.localDate === dayKey ? session.durationMilliseconds ?? 0 : 0
+        : session.segments.reduce((sum, segment) => sum + (segment.kind === 'break' ? 0 : Math.max(0, Math.min(segment.endedAt ?? now, dayEnd.getTime(), now) - Math.max(segment.startedAt, dayStart.getTime()))), 0)), 0);
+    return { milliseconds, count: state.completed.filter(session => isDurationOnly(session) ? session.localDate === dayKey : session.endedAt! >= dayStart.getTime() && session.endedAt! < dayEnd.getTime()).length };
 }
 export function formatDuration(ms: number): string {
     const seconds = Math.floor(ms / 1000);
@@ -84,8 +102,13 @@ export function formatDurationMilliseconds(ms: number): string {
     const milliseconds = safe % 1000;
     return `${formatDuration(safe)}.${String(milliseconds).padStart(3, '0')}`;
 }
+export function formatCompletedDuration(ms: number): string {
+    const totalMinutes = Math.floor(Math.max(0, ms) / 60000);
+    return `${Math.floor(totalMinutes / 60)}:${String(totalMinutes % 60).padStart(2, '0')}`;
+}
 
 export function sessionIntervals(session: Session, now: number): SessionInterval[] {
+    if (isDurationOnly(session)) return [];
     const intervals: SessionInterval[] = [];
     for (const segment of session.segments) {
         const previous = intervals.at(-1);

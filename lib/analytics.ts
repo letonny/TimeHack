@@ -1,8 +1,8 @@
 import { activityKey } from './habits.ts';
-import type { Habit, Session, TimerState } from './timer.ts';
+import { isDurationOnly, type Habit, type Session, type TimerState } from './timer.ts';
 
 export type DayTotal = { milliseconds: number; sessionCount: number };
-export type DayHistoryItem = { sessionId: string; name: string; milliseconds: number; startedAt: number };
+export type DayHistoryItem = { sessionId: string; name: string; milliseconds: number; startedAt: number | null };
 export type Streaks = { current: number; longest: number };
 export type GoalProgress = {
   minutes: number;
@@ -31,6 +31,7 @@ export type DayTimeline = {
   activityMilliseconds: number;
   breakMilliseconds: number;
   trackedMilliseconds: number;
+  unscheduledMilliseconds: number;
   untrackedMilliseconds: number;
   remainingMilliseconds: number;
 };
@@ -133,11 +134,13 @@ export function buildDayTimeline(
   const sum = (category: DayTimelineCategory) => slices.reduce((total, slice) => total + (slice.category === category ? slice.milliseconds : 0), 0);
   const activityMilliseconds = sum('activity');
   const breakMilliseconds = sum('break');
+  const unscheduledMilliseconds = sessions(state).reduce((total, session) => total + (isDurationOnly(session) && session.localDate === dayKey && (!filter || activityKey(session.name) === filter) ? session.durationMilliseconds ?? 0 : 0), 0);
   return {
     dayKey, dayStartedAt, dayEndedAt, dayMilliseconds: dayEndedAt - dayStartedAt, elapsedAt, slices,
     activityMilliseconds,
     breakMilliseconds,
-    trackedMilliseconds: activityMilliseconds + breakMilliseconds,
+    trackedMilliseconds: activityMilliseconds + breakMilliseconds + unscheduledMilliseconds,
+    unscheduledMilliseconds,
     untrackedMilliseconds: sum('untracked'),
     remainingMilliseconds: sum('remaining'),
   };
@@ -149,6 +152,10 @@ export function dailyActivity(state: TimerState, now: number, activity?: string)
   const dayKeys = new Set<string>();
   for (const session of sessions(state)) {
     if (filter && activityKey(session.name) !== filter) continue;
+    if (isDurationOnly(session)) {
+      if (session.localDate && (session.durationMilliseconds ?? 0) > 0) dayKeys.add(session.localDate);
+      continue;
+    }
     for (const segment of session.segments) {
       if (segment.kind === 'break') continue;
       const endedAt = Math.min(segment.endedAt ?? now, now);
@@ -164,10 +171,11 @@ export function dailyActivity(state: TimerState, now: number, activity?: string)
   for (const dayKey of dayKeys) {
     const timeline = buildDayTimeline(state, now, dayKey, { activity });
     const activitySlices = timeline.slices.filter(slice => slice.category === 'activity');
-    if (!activitySlices.length) continue;
+    const unscheduled = sessions(state).filter(session => isDurationOnly(session) && session.localDate === dayKey && (!filter || activityKey(session.name) === filter));
+    if (!activitySlices.length && !unscheduled.length) continue;
     result.set(dayKey, {
-      milliseconds: activitySlices.reduce((total, slice) => total + slice.milliseconds, 0),
-      sessionCount: new Set(activitySlices.map(slice => slice.sessionId)).size,
+      milliseconds: activitySlices.reduce((total, slice) => total + slice.milliseconds, 0) + unscheduled.reduce((total, session) => total + (session.durationMilliseconds ?? 0), 0),
+      sessionCount: new Set([...activitySlices.map(slice => slice.sessionId), ...unscheduled.map(session => session.id)]).size,
     });
   }
   return result;
@@ -185,7 +193,11 @@ export function activityHistoryForDay(state: TimerState, dayKey: string, now: nu
     if (existing) existing.milliseconds += slice.milliseconds;
     else bySession.set(session.id, { sessionId: session.id, name: session.name, milliseconds: slice.milliseconds, startedAt: session.startedAt });
   }
-  return [...bySession.values()].sort((a, b) => b.startedAt - a.startedAt);
+  for (const session of sessions(state)) {
+    if (!isDurationOnly(session) || session.localDate !== dayKey || (filter && activityKey(session.name) !== filter)) continue;
+    bySession.set(session.id, { sessionId: session.id, name: session.name, milliseconds: session.durationMilliseconds ?? 0, startedAt: null });
+  }
+  return [...bySession.values()].sort((a, b) => (b.startedAt ?? -1) - (a.startedAt ?? -1));
 }
 
 export function calculateGoalProgress(minutes: number, goalMinutes: number): GoalProgress {

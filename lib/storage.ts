@@ -9,7 +9,7 @@ function validSession(value: unknown, active: boolean, legacy: boolean): value i
     const s = value as Session;
     if (typeof s.id !== 'string' || !s.id || typeof s.name !== 'string' || !s.name.trim() || !timestamp(s.startedAt) || (active ? s.endedAt !== null : !timestamp(s.endedAt)) || !Array.isArray(s.segments) || !s.segments.length)
         return false;
-    let previous = s.startedAt;
+    let previous = s.startedAt!;
     return s.segments.every((segment, index) => {
         if (!segment || (!legacy && segment.kind !== 'study' && segment.kind !== 'break') || !timestamp(segment.startedAt) || segment.startedAt < previous)
             return false;
@@ -31,8 +31,8 @@ export function loadState(storage: StoragePort): TimerState {
     const ids = [...data.completed.map((s: Session) => s.id), ...(data.active ? [data.active.id] : [])];
     if (new Set(ids).size !== ids.length)
         throw new Error('Duplicate session IDs');
-    const migrate = (session: Session): Session => ({ ...session, segments: session.segments.map(segment => ({ ...segment, kind: data.version === 1 ? 'study' : segment.kind })) });
-    let state: TimerState = { active: data.active ? migrate(data.active) : null, completed: data.completed.map(migrate), habits: [] };
+    const migrate = (session: Session): Session => ({ ...session, entryType: 'timer', localDate: null, durationMilliseconds: null, activityId: null, note: '', segments: session.segments.map(segment => ({ ...segment, kind: data.version === 1 ? 'study' : segment.kind })) });
+    let state: TimerState = { active: data.active ? migrate(data.active) : null, completed: data.completed.map(migrate), habits: [], activities: [], profile: { displayName: '' } };
     if (data.version === 2) {
         if (!Array.isArray(data.habits)) throw new Error('Invalid habits');
         const habitIds = new Set<string>();
