@@ -29,7 +29,7 @@ export function AuthForm({ mode }: { mode: 'login' | 'signup' }) {
         </form>
         <p className="mt-7 text-center text-sm text-slate-400">{isSignup ? 'Already have an account?' : 'New to TimeHack?'} <Link href={isSignup ? '/login' : '/signup'} className="font-medium text-teal-300 hover:text-teal-200">{isSignup ? 'Sign in' : 'Create an account'}</Link></p>
       </div>
-      <p className="mt-6 text-center text-xs text-slate-500">Habits and sessions are saved on this device.</p>
+      <p className="mt-6 text-center text-xs text-slate-500">Habits and sessions sync with your account.</p>
     </div>
   </main>;
 }
