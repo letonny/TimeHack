@@ -1,6 +1,6 @@
 # TimeHack
 
-A productivity dashboard built with Next.js, TypeScript, Tailwind CSS, and Supabase. Track daily habits and activities with start, SET study/break transitions, pause/resume, and Finish controls. Review productive time and individual session segments across devices.
+A personal time-tracking dashboard built with Next.js, TypeScript, Tailwind CSS, and Supabase. Track daily habits and activities with start, SET study/break transitions, pause/resume, and Finish controls. Review total tracked time and individual session intervals across devices.
 
 ## Development
 
@@ -50,7 +50,7 @@ Tests cover SET transitions, study/break durations, pause/resume, local-day prog
 - `supabase/migrations/`: versioned database schema, grants, RLS, and transactional writes.
 - `tests/`: Node test runner tests with an in-memory storage adapter.
 
-Sessions contain timestamped study and break segments. SET closes the current segment and starts the opposite mode within the same session. Pause closes the current segment; resume opens another in the same mode. SET is disabled while paused. Finish saves the session even while paused or on break. Productive totals exclude breaks and pauses, include active sessions, and clip intervals at local midnight. Completed count uses each session's completion date.
+Sessions contain timestamped study and break segments. SET closes the current segment and starts the opposite mode within the same session. Pause closes the current segment; resume opens another in the same mode. SET is disabled while paused. Finish saves the session even while paused or on break. Total tracked time includes study and recorded breaks while excluding pauses. Habit and calendar study/focus totals exclude breaks and clip intervals at local midnight.
 
 Habits have unique names (ignoring case and surrounding spaces) and whole-minute daily goals from 1 to 1440. Use Track on a habit or enter its name in the timer to match it. Progress derives from matching activity records, including the active study segment; editing a goal recalculates progress immediately. Renaming a habit matches activities with the new name. Deleting a habit keeps its activity history; deleting an activity removes its contribution to progress. Goals reset at local midnight without deleting history. Progress is capped at 100%, while completed minutes may exceed the goal.
 
@@ -59,10 +59,10 @@ Schema version 2 reads Milestone 1 sessions as study segments during the optiona
 ## Manual acceptance check
 
 1. Run `npm run dev`. On desktop and iPhone Safari (or 375px/390px mobile viewports), create Study with a 120-minute goal and Gym with a 60-minute goal. Edit a goal, refresh, and verify both persist. Try a duplicate name and an invalid goal.
-2. Press Track on Study. Wait, press SET to start a break, wait, then press SET to resume studying. Repeat. Verify productive time and habit progress freeze during breaks. Expand Session segments to inspect each duration.
+2. Press Track on Study. Wait, press SET to start a break, wait, then press SET to resume studying. Repeat. Verify total tracked time includes the break while habit progress freezes during it. Expand the SET interval breakdown to inspect each duration.
 3. Pause during study, wait, refresh, and resume. Repeat during a break. Confirm SET is disabled while paused and resume keeps the previous mode. Paused time must never increase progress.
 4. Refresh during running study and during a running break. Verify name, mode, segments, goals, and elapsed durations recover correctly. Switch tabs for a minute and return.
-5. Finish while studying, while on break, and while paused in separate sessions. Expand each saved session's segments. Verify productive totals exclude breaks and pauses.
+5. Finish while studying, while on break, and while paused in separate sessions. Expand each saved session report. Verify total tracked time includes recorded breaks and excludes paused gaps.
 6. Start an activity named `study` to verify case-insensitive matching; start an unrelated activity to verify Study progress stays fixed. Check that a new local day starts progress at zero.
 7. Rename and delete habits; verify session history remains. Delete a matching saved session, confirm the prompt, and refresh to verify progress and history update.
 8. Use keyboard navigation and long habit/activity names. Check visible focus indicators, readable controls, and no horizontal overflow on mobile.

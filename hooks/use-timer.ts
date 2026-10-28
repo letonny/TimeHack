@@ -89,7 +89,7 @@ export function useTimer() {
       }
     }
     void initialize();
-    const clock = window.setInterval(() => setNow(Date.now()), 500);
+    const clock = window.setInterval(() => setNow(Date.now()), 30000);
     const interval = window.setInterval(() => void syncRef.current(), 8000);
     const visible = () => { setNow(Date.now()); if (!document.hidden) void syncRef.current(); };
     const storage = (event: StorageEvent) => {

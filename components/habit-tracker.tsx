@@ -13,7 +13,7 @@ export function HabitTracker({ state, now, ready, onSave, onDelete, onTrack }: {
     function reset() { setEditing(null); setName(''); setGoal('120'); }
     return <section className="panel mt-8 p-6 sm:p-8" aria-labelledby="habits-title">
         <h2 id="habits-title" className="text-lg font-semibold">Daily habits</h2>
-        <p className="mt-2 text-sm text-slate-400">Match an activity name to a habit to count productive time automatically. Goals reset at local midnight. Renaming a habit matches its new name.</p>
+        <p className="mt-2 text-sm text-slate-400">Match an activity name to a habit to count its study/focus time automatically. Goals reset at local midnight. Recorded breaks and pauses do not advance goals.</p>
         <form className="mt-5 flex flex-wrap items-end gap-3" onSubmit={event => { event.preventDefault(); if (onSave({ id: editing ?? crypto.randomUUID(), name, goalMinutes: Number(goal) })) reset(); }}>
             <label className="min-w-0 flex-1 basis-44 text-sm">Habit name<input required maxLength={120} value={name} onChange={event => setName(event.target.value)} placeholder="Study" className="mt-2 w-full rounded-xl border border-white/10 bg-[#0b1424] p-3 text-base"/></label>
             <label className="text-sm">Daily goal (minutes)<input required type="number" min="1" max="1440" step="1" value={goal} onChange={event => setGoal(event.target.value)} className="mt-2 block w-36 rounded-xl border border-white/10 bg-[#0b1424] p-3 text-base"/></label>

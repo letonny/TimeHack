@@ -1,46 +1,67 @@
 'use client';
+
 import { useState } from 'react';
 import Link from 'next/link';
-import { useTimer } from '@/hooks/use-timer';
-import { duration, formatDuration, isRunning, todaySummary } from '@/lib/timer';
-import { HabitTracker } from './habit-tracker';
-import { SegmentHistory } from './segment-history';
-import { StatCard } from './stat-card';
-import { ActivityHistory } from './activity-history';
-import { ActivityCalendar } from './activity-calendar';
-import { logout } from '@/app/auth/actions';
 import { useFormStatus } from 'react-dom';
+import { logout } from '@/app/auth/actions';
+import { useTimer } from '@/hooks/use-timer';
+import { formatDashboardDate } from '@/lib/analytics';
+import { isRunning } from '@/lib/timer';
+import { ActivityCalendar } from './activity-calendar';
+import { ActivityHistory } from './activity-history';
+import { HabitTracker } from './habit-tracker';
+import { LiveSessionTimer } from './live-session-timer';
+import { SegmentHistory } from './segment-history';
+import { SessionReport } from './session-report';
+import { TodayActivityRing } from './today-activity-ring';
+
 function SignOutButton() {
-    const { pending } = useFormStatus();
-    return <button type="submit" disabled={pending} className="rounded-lg border border-white/15 px-3 py-2 text-xs font-medium text-slate-300 hover:bg-white/10">{pending ? 'Signing out…' : 'Sign out'}</button>;
+  const { pending } = useFormStatus();
+  return <button type="submit" disabled={pending} className="rounded-lg border border-white/15 px-3 py-2 text-xs font-medium text-slate-300 hover:bg-white/10">{pending ? 'Signing out…' : 'Sign out'}</button>;
 }
+
 export function Dashboard() {
-    const timer = useTimer();
-    const [name, setName] = useState('');
-    const active = timer.state.active;
-    const onBreak = active?.segments.at(-1)?.kind === 'break';
-    const running = active ? isRunning(active) : false;
-    const summary = timer.now === null ? null : todaySummary(timer.state, timer.now);
-    return <div className="min-h-screen"><header className="border-b border-white/8"><div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-5 py-5 sm:px-8"><Link href="/" className="flex items-center gap-3 text-xl font-bold tracking-tight"><span aria-hidden="true" className="flex size-9 items-center justify-center rounded-xl bg-teal-300 text-lg text-[#0b1424]">↗</span>TimeHack<span className="sr-only"> home</span></Link><div className="flex items-center gap-4"><span className="hidden text-xs text-slate-400 sm:inline">Your time, intentionally.</span><form action={logout}><SignOutButton /></form></div></div></header>
-    <main className="mx-auto max-w-6xl px-5 py-9 sm:px-8 sm:py-12"><div className="mb-8 flex flex-wrap items-end justify-between gap-4"><div><p className="eyebrow">MAKE ROOM FOR WHAT MATTERS</p><h1 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">A little more focused.</h1><p className="mt-3 text-sm text-slate-400 sm:text-base">One activity at a time. Make today count.</p></div><p className="text-sm text-slate-400">{timer.now !== null ? new Date(timer.now).toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' }) : 'Getting your day ready…'}</p></div>
-    {timer.error && <p role="alert" className="mb-6 rounded-xl border border-amber-300/30 bg-amber-300/10 p-4 text-sm text-amber-100">{timer.error}</p>}
-    <div role="status" className="mb-6 flex flex-wrap items-center gap-3 rounded-xl border border-white/10 bg-white/5 p-4 text-sm text-slate-300">
-      <span>{timer.syncing ? 'Syncing…' : timer.pending ? `${timer.pending} change${timer.pending === 1 ? '' : 's'} waiting to sync` : timer.syncError ? 'Sync needs attention' : timer.ready ? 'Synced across your devices' : 'Loading account data…'}</span>
-      {(timer.syncError || timer.error) && !timer.conflict && <button type="button" onClick={timer.retry} className="rounded-lg bg-white/10 px-3 py-1 text-teal-200">Retry</button>}
-      {timer.conflict && <button type="button" onClick={timer.useCloudVersion} className="rounded-lg bg-white/10 px-3 py-1 text-teal-200">Back up changes and load cloud version</button>}
-    </div>
-    {timer.syncError && <p role="alert" className="mb-6 rounded-xl border border-amber-300/30 bg-amber-300/10 p-4 text-sm text-amber-100">{timer.syncError}</p>}
-    {timer.legacyAvailable && <div className="mb-6 rounded-xl border border-teal-300/20 bg-teal-300/5 p-4 text-sm text-slate-200"><p>This browser has older TimeHack data. Review it only if this is your browser profile. Your original browser data will be kept.</p><button type="button" disabled={!timer.ready || timer.pending > 0 || timer.syncing} onClick={timer.previewLegacy} className="mt-3 rounded-lg bg-white/10 px-3 py-2 font-medium text-teal-200 disabled:opacity-50">Review browser data</button>{timer.legacyPreview && <div className="mt-4 space-y-2"><p>{timer.legacyPreview.habits.length} habits: {timer.legacyPreview.habits.map(habit => habit.name).join(', ') || 'none'}</p><p>{timer.legacyPreview.completed.length} completed sessions{timer.legacyPreview.active ? ' and one active session' : ''}</p><p>This data may belong to another person who used this browser. Import only if it is yours.</p><button type="button" disabled={!timer.ready || timer.pending > 0 || timer.syncing} onClick={timer.importLegacy} className="rounded-lg bg-teal-300 px-3 py-2 font-medium text-slate-950 disabled:opacity-50">Import into this account</button></div>}</div>}
-    <section aria-labelledby="today-title"><h2 id="today-title" className="mb-4 text-sm font-medium text-slate-300">Today overview</h2><div className="grid gap-4 sm:grid-cols-2"><StatCard label="Total tracked time" value={summary ? formatDuration(summary.milliseconds) : '—'} note="Productive time today · breaks and pauses excluded"/><StatCard label="Completed sessions" value={summary ? String(summary.count).padStart(2, '0') : '—'} note="Sessions finished today"/></div></section>
-    {timer.now !== null && <ActivityCalendar state={timer.state} now={timer.now}/>}
-    <section aria-labelledby="timer-title" className="panel relative mt-8 overflow-hidden"><div aria-hidden="true" className="pointer-events-none absolute -right-20 -top-28 size-80 rounded-full bg-teal-400/5 blur-3xl"/><div className="relative p-6 sm:p-8"><div className="flex items-center justify-between gap-4"><h2 id="timer-title" className="text-lg font-semibold">Focus timer</h2><span role="status" className="rounded-full bg-teal-300/10 px-3 py-1 text-xs text-teal-200">{!timer.ready ? 'Loading' : active ? running ? onBreak ? '● On break' : '● Studying' : 'Ⅱ Paused' : 'Ready when you are'}</span></div>
-    <form onSubmit={event => { event.preventDefault(); timer.start(name); }} className="mt-7"><label htmlFor="activity" className="text-sm text-slate-300">What are you working on?</label><input id="activity" value={active?.name ?? name} onChange={event => setName(event.target.value)} disabled={!!active || !timer.ready} maxLength={120} autoComplete="off" placeholder="e.g. Reading, deep work, a new idea…" className="mt-3 w-full rounded-xl border border-white/10 bg-[#0b1424] px-4 py-3.5 text-base text-white placeholder:text-slate-500 disabled:opacity-70"/>
-    <div className="py-10 text-center sm:py-12"><p className="font-mono text-[clamp(2.8rem,10vw,5.5rem)] leading-none font-medium tracking-tight tabular-nums text-white" aria-label="Productive study time">{formatDuration(active && timer.now !== null ? duration(active, timer.now) : 0)}</p><p className="mt-4 text-sm text-slate-400">{active ? running ? onBreak ? 'On break. Press SET to resume studying.' : 'Stay with it. Press SET to start a break.' : 'Take a breath. Resume when you’re ready.' : 'Give your next activity a little space.'}</p></div>
-    <div className="mx-auto flex max-w-md flex-wrap gap-3">{!active ? <button type="submit" disabled={!timer.ready || !name.trim()} className="primary flex-1">▶ <span className="ml-2">Start session</span></button> : <><button type="button" disabled={!timer.ready || !running} onClick={timer.set} className="primary flex-1" aria-label={onBreak ? "SET: resume studying" : "SET: start break"}>SET<span className="mt-1 block text-xs">{onBreak ? 'Study' : 'Break'}</span></button><button type="button" disabled={!timer.ready} onClick={running ? timer.pause : timer.resume} className="primary flex-1">{running ? 'Ⅱ Pause' : '▶ Resume'}</button><button type="button" disabled={!timer.ready} onClick={timer.stop} className="flex-1 rounded-xl border border-white/15 bg-white/5 px-5 py-3.5 text-sm font-semibold hover:bg-white/10">■ Finish</button></>}</div></form>
-    <p className="mt-6 text-center text-xs leading-relaxed text-slate-500">Saved to your account and backed up on this device. Your timer stays with you when you refresh.</p></div></section>
-    {active && timer.now !== null && <div className="panel mt-4 p-6"><SegmentHistory session={active} now={timer.now}/></div>}
-    <HabitTracker state={timer.state} now={timer.now} ready={timer.ready} onSave={timer.saveHabit} onDelete={timer.deleteHabit} onTrack={timer.start}/>
-    <ActivityHistory sessions={timer.state.completed} onDelete={timer.remove}/>
-    <footer className="mt-8 flex flex-wrap justify-between gap-3 text-xs leading-relaxed text-slate-500"><p>Small steps. Meaningful progress.</p><p>Habits and sessions sync with your account.</p></footer>
-    </main></div>;
+  const timer = useTimer();
+  const [name, setName] = useState('');
+  const [recentSessionId, setRecentSessionId] = useState<string | null>(null);
+  const active = timer.state.active;
+  const running = active ? isRunning(active) : false;
+  const onBreak = active?.segments.at(-1)?.kind === 'break';
+  const date = timer.now === null ? null : formatDashboardDate(timer.now);
+  const recentSession = recentSessionId ? timer.state.completed.find(session => session.id === recentSessionId) : null;
+  const syncLabel = timer.syncing ? 'Syncing' : timer.pending ? `${timer.pending} pending` : timer.syncError ? 'Sync issue' : timer.ready ? 'Synced' : 'Loading';
+
+  return <div className="min-h-screen">
+    <header className="border-b border-white/8"><div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-5 py-4 sm:px-8">
+      <Link href="/" className="flex items-center gap-3 text-xl font-bold tracking-tight"><span aria-hidden="true" className="flex size-9 items-center justify-center rounded-xl bg-teal-300 text-lg text-[#0b1424]">↗</span>TimeHack<span className="sr-only"> home</span></Link>
+      <div className="flex items-center gap-3"><div role="status" className="flex items-center gap-2 text-[11px] text-slate-400" title={timer.syncError || 'Account synchronization status'}><span className={`size-1.5 rounded-full ${timer.syncError ? 'bg-amber-300' : timer.syncing || timer.pending ? 'bg-sky-300' : timer.ready ? 'bg-teal-300' : 'bg-slate-500'}`}/><span className="hidden sm:inline">{syncLabel}</span></div><form action={logout}><SignOutButton/></form></div>
+    </div></header>
+
+    <main className="mx-auto max-w-6xl px-5 py-7 sm:px-8 sm:py-9">
+      <div className="mb-8 text-center" aria-live="polite">{date ? <><p className="text-sm font-semibold tracking-[.28em] text-teal-300 sm:text-base">{date.weekday}</p><h1 className="mt-2 text-3xl font-semibold tracking-tight text-white sm:text-5xl">{date.date}</h1></> : <h1 className="text-xl text-slate-400">Loading today…</h1>}</div>
+
+      {timer.error && <p role="alert" className="mb-5 rounded-xl border border-amber-300/30 bg-amber-300/10 p-4 text-sm text-amber-100">{timer.error}</p>}
+      {timer.syncError && <div role="alert" className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-300/20 bg-amber-300/5 px-4 py-3 text-xs text-amber-100"><span>{timer.syncError}</span>{timer.conflict ? <button type="button" onClick={timer.useCloudVersion} className="rounded-lg bg-white/10 px-3 py-2 text-teal-100">Back up changes and load cloud version</button> : <button type="button" onClick={timer.retry} className="rounded-lg bg-white/10 px-3 py-2 text-teal-100">Retry sync</button>}</div>}
+      {timer.legacyAvailable && <details className="mb-5 rounded-xl border border-white/8 bg-white/[.025] px-4 py-3 text-xs text-slate-400"><summary className="cursor-pointer text-slate-300">Older browser data is available</summary><div className="mt-3"><p>Review this only if this browser profile is yours. Original local data will be preserved.</p><button type="button" disabled={!timer.ready || timer.pending > 0 || timer.syncing} onClick={timer.previewLegacy} className="mt-3 rounded-lg bg-white/10 px-3 py-2 text-teal-200">Review browser data</button>{timer.legacyPreview && <div className="mt-3 space-y-2"><p>{timer.legacyPreview.habits.length} habits and {timer.legacyPreview.completed.length + (timer.legacyPreview.active ? 1 : 0)} sessions found.</p><button type="button" disabled={!timer.ready || timer.pending > 0 || timer.syncing} onClick={timer.importLegacy} className="rounded-lg bg-teal-300 px-3 py-2 font-medium text-slate-950">Import into this account</button></div>}</div></details>}
+
+      {timer.now !== null && <TodayActivityRing state={timer.state} initialNow={timer.now}/>}
+
+      <section aria-labelledby="timer-title" className="panel relative mt-8 overflow-hidden"><div aria-hidden="true" className="pointer-events-none absolute -right-20 -top-28 size-80 rounded-full bg-teal-400/5 blur-3xl"/><div className="relative p-5 sm:p-8">
+        <div className="flex items-center justify-between gap-4"><div><p className="eyebrow">LIVE SESSION</p><h2 id="timer-title" className="mt-2 text-xl font-semibold">Activity timer</h2></div><span className="rounded-full bg-white/5 px-3 py-1 text-xs text-slate-300">{!timer.ready ? 'Loading' : active ? running ? onBreak ? 'Break' : 'Study' : 'Paused' : 'Ready'}</span></div>
+        <form onSubmit={event => { event.preventDefault(); if (timer.start(name)) setName(''); }} className="mt-6"><label htmlFor="activity" className="text-sm text-slate-300">What are you tracking?</label><input id="activity" value={active?.name ?? name} onChange={event => setName(event.target.value)} disabled={!!active || !timer.ready} maxLength={120} autoComplete="off" placeholder="e.g. Studying, gym, cooking…" className="mt-3 w-full rounded-xl border border-white/10 bg-[#0b1424] px-4 py-3.5 text-base text-white placeholder:text-slate-500 disabled:opacity-70"/>
+          {active && timer.now !== null ? <LiveSessionTimer session={active} initialNow={timer.now}/> : <div className="py-9 text-center sm:py-12"><p className="text-2xl font-medium text-slate-300">Ready for your next activity</p><p className="mt-2 text-sm text-slate-500">Start a session to see live study, break, and tracked time.</p></div>}
+          <div className="mx-auto flex max-w-md flex-wrap gap-3">{!active ? <button type="submit" disabled={!timer.ready || !name.trim()} className="primary flex-1">▶ <span className="ml-2">Start session</span></button> : <><button type="button" disabled={!timer.ready || !running} onClick={timer.set} className="primary flex-1" aria-label={onBreak ? 'SET: begin study interval' : 'SET: begin break interval'}>SET<span className="mt-1 block text-xs">{onBreak ? 'Study' : 'Break'}</span></button><button type="button" disabled={!timer.ready} onClick={running ? timer.pause : timer.resume} className="primary flex-1">{running ? 'Ⅱ Pause' : '▶ Resume'}</button><button type="button" disabled={!timer.ready} onClick={() => { const id = active.id; if (timer.stop()) setRecentSessionId(id); }} className="flex-1 rounded-xl border border-white/15 bg-white/5 px-5 py-3.5 text-sm font-semibold hover:bg-white/10">■ Finish</button></>}</div>
+        </form>
+        {active && timer.now !== null && <SegmentHistory session={active} now={timer.now}/>}
+        <p className="mt-5 text-center text-xs text-slate-500">Timestamp-based and saved to your account. Paused time is excluded.</p>
+      </div></section>
+
+      {recentSession && <section className="panel mt-5 p-5 sm:p-8" aria-label="Most recently completed session"><div className="flex justify-end"><button type="button" onClick={() => setRecentSessionId(null)} className="rounded-lg px-2 py-1 text-xs text-slate-500 hover:bg-white/5 hover:text-white">Dismiss</button></div><SessionReport session={recentSession} now={recentSession.endedAt!}/></section>}
+
+      <HabitTracker state={timer.state} now={timer.now} ready={timer.ready} onSave={timer.saveHabit} onDelete={timer.deleteHabit} onTrack={timer.start}/>
+      {timer.now !== null && <ActivityCalendar state={timer.state} now={timer.now}/>}
+      <ActivityHistory sessions={timer.state.completed} onDelete={timer.remove}/>
+      <footer className="mt-8 flex flex-wrap justify-between gap-3 text-xs text-slate-500"><p>Your time, clearly recorded.</p><p>Habits and sessions sync with your account.</p></footer>
+    </main>
+  </div>;
 }

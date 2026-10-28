@@ -16,9 +16,30 @@ export type TimerState = {
     completed: Session[];
 };
 export type Habit = { id: string; name: string; goalMinutes: number };
+export type SessionInterval = {
+    kind: Segment['kind'];
+    startedAt: number;
+    endedAt: number | null;
+    milliseconds: number;
+    segmentCount: number;
+};
+export type SessionSummary = {
+    studyMilliseconds: number;
+    breakMilliseconds: number;
+    trackedMilliseconds: number;
+    studyShare: number;
+    breakCount: number;
+    intervals: SessionInterval[];
+};
 export const emptyState = (): TimerState => ({ active: null, completed: [], habits: [] });
 export function duration(session: Session, now: number): number {
     return session.segments.reduce((total, segment) => total + (segment.kind === 'break' ? 0 : segmentDuration(segment, now)), 0);
+}
+export function durationByKind(session: Session, now: number, kind: Segment['kind']): number {
+    return session.segments.reduce((total, segment) => total + (segment.kind === kind ? segmentDuration(segment, now) : 0), 0);
+}
+export function trackedDuration(session: Session, now: number): number {
+    return session.segments.reduce((total, segment) => total + segmentDuration(segment, now), 0);
 }
 export function isRunning(session: Session): boolean {
     return session.segments.at(-1)?.endedAt === null;
@@ -57,6 +78,47 @@ export function todaySummary(state: TimerState, now: number) {
 export function formatDuration(ms: number): string {
     const seconds = Math.floor(ms / 1000);
     return [Math.floor(seconds / 3600), Math.floor(seconds / 60) % 60, seconds % 60].map(value => String(value).padStart(2, '0')).join(':');
+}
+export function formatDurationMilliseconds(ms: number): string {
+    const safe = Math.max(0, Math.floor(ms));
+    const milliseconds = safe % 1000;
+    return `${formatDuration(safe)}.${String(milliseconds).padStart(3, '0')}`;
+}
+
+export function sessionIntervals(session: Session, now: number): SessionInterval[] {
+    const intervals: SessionInterval[] = [];
+    for (const segment of session.segments) {
+        const previous = intervals.at(-1);
+        if (previous?.kind === segment.kind) {
+            previous.endedAt = segment.endedAt;
+            previous.milliseconds += segmentDuration(segment, now);
+            previous.segmentCount += 1;
+        } else {
+            intervals.push({
+                kind: segment.kind,
+                startedAt: segment.startedAt,
+                endedAt: segment.endedAt,
+                milliseconds: segmentDuration(segment, now),
+                segmentCount: 1,
+            });
+        }
+    }
+    return intervals;
+}
+
+export function summarizeSession(session: Session, now: number): SessionSummary {
+    const studyMilliseconds = durationByKind(session, now, 'study');
+    const breakMilliseconds = durationByKind(session, now, 'break');
+    const trackedMilliseconds = studyMilliseconds + breakMilliseconds;
+    const intervals = sessionIntervals(session, now);
+    return {
+        studyMilliseconds,
+        breakMilliseconds,
+        trackedMilliseconds,
+        studyShare: trackedMilliseconds > 0 ? studyMilliseconds / trackedMilliseconds * 100 : 0,
+        breakCount: intervals.filter(interval => interval.kind === 'break').length,
+        intervals,
+    };
 }
 
 export function segmentDuration(segment: Segment, now: number): number {
