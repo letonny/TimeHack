@@ -13,6 +13,12 @@ npm run dev
 
 Open http://localhost:3000. Production: `npm run build`, then `npm start`.
 
+## Supabase authentication
+
+Set `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` in `.env.local` using your Supabase project URL and publishable key. Do not use a service-role key. In Supabase Authentication, enable the Email provider and set the Site URL to `http://localhost:3000` for local development. Add `http://localhost:3000/auth/callback` to allowed redirect URLs. Add the corresponding deployed callback URL when deploying. If email confirmation is enabled, keep the confirmation email link directed to `{{ .ConfirmationURL }}` (the default) so Supabase redirects back with an auth code. A custom token-hash template can also point to `/auth/callback?token_hash={{ .TokenHash }}&type=signup`.
+
+Visit `/signup` to create an account, confirm by email if required, then sign in at `/login`. The dashboard at `/` requires a verified session. Sign out from the dashboard header. Habits and timer sessions remain in browser localStorage on this origin and are not tied to an account or synced to Supabase, so accounts sharing a browser profile see the same local data.
+
 ## Checks
 
 ```sh
@@ -51,4 +57,4 @@ Schema version 2 automatically reads Milestone 1 sessions as study segments and 
 7. Rename and delete habits; verify session history remains. Delete a matching saved session, confirm the prompt, and refresh to verify progress and history update.
 8. Use keyboard navigation and long habit/activity names. Check visible focus indicators, readable controls, and no horizontal overflow on mobile.
 
-No authentication, database, reminders, or AI services are included in this milestone.
+No database persistence, reminders, or AI services are included in this milestone.

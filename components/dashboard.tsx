@@ -7,6 +7,12 @@ import { HabitTracker } from './habit-tracker';
 import { SegmentHistory } from './segment-history';
 import { StatCard } from './stat-card';
 import { ActivityHistory } from './activity-history';
+import { logout } from '@/app/auth/actions';
+import { useFormStatus } from 'react-dom';
+function SignOutButton() {
+    const { pending } = useFormStatus();
+    return <button type="submit" disabled={pending} className="rounded-lg border border-white/15 px-3 py-2 text-xs font-medium text-slate-300 hover:bg-white/10">{pending ? 'Signing out…' : 'Sign out'}</button>;
+}
 export function Dashboard() {
     const timer = useTimer();
     const [name, setName] = useState('');
@@ -14,7 +20,7 @@ export function Dashboard() {
     const onBreak = active?.segments.at(-1)?.kind === 'break';
     const running = active ? isRunning(active) : false;
     const summary = timer.now === null ? null : todaySummary(timer.state, timer.now);
-    return <div className="min-h-screen"><header className="border-b border-white/8"><div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-5 py-5 sm:px-8"><Link href="/" className="flex items-center gap-3 text-xl font-bold tracking-tight"><span aria-hidden="true" className="flex size-9 items-center justify-center rounded-xl bg-teal-300 text-lg text-[#0b1424]">↗</span>TimeHack<span className="sr-only"> home</span></Link><span className="text-xs text-slate-400"><span className="mr-2 inline-block size-1.5 rounded-full bg-teal-300"/>Your time, intentionally.</span></div></header>
+    return <div className="min-h-screen"><header className="border-b border-white/8"><div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-5 py-5 sm:px-8"><Link href="/" className="flex items-center gap-3 text-xl font-bold tracking-tight"><span aria-hidden="true" className="flex size-9 items-center justify-center rounded-xl bg-teal-300 text-lg text-[#0b1424]">↗</span>TimeHack<span className="sr-only"> home</span></Link><div className="flex items-center gap-4"><span className="hidden text-xs text-slate-400 sm:inline">Your time, intentionally.</span><form action={logout}><SignOutButton /></form></div></div></header>
     <main className="mx-auto max-w-6xl px-5 py-9 sm:px-8 sm:py-12"><div className="mb-8 flex flex-wrap items-end justify-between gap-4"><div><p className="eyebrow">MAKE ROOM FOR WHAT MATTERS</p><h1 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">A little more focused.</h1><p className="mt-3 text-sm text-slate-400 sm:text-base">One activity at a time. Make today count.</p></div><p className="text-sm text-slate-400">{timer.now !== null ? new Date(timer.now).toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' }) : 'Getting your day ready…'}</p></div>
     {timer.error && <p role="alert" className="mb-6 rounded-xl border border-amber-300/30 bg-amber-300/10 p-4 text-sm text-amber-100">{timer.error}</p>}
     <section aria-labelledby="today-title"><h2 id="today-title" className="mb-4 text-sm font-medium text-slate-300">Today overview</h2><div className="grid gap-4 sm:grid-cols-2"><StatCard label="Total tracked time" value={summary ? formatDuration(summary.milliseconds) : '—'} note="Productive time today · breaks and pauses excluded"/><StatCard label="Completed sessions" value={summary ? String(summary.count).padStart(2, '0') : '—'} note="Sessions finished today"/></div></section>
@@ -26,6 +32,6 @@ export function Dashboard() {
     {active && timer.now !== null && <div className="panel mt-4 p-6"><SegmentHistory session={active} now={timer.now}/></div>}
     <HabitTracker state={timer.state} now={timer.now} ready={timer.ready} onSave={timer.saveHabit} onDelete={timer.deleteHabit} onTrack={timer.start}/>
     <ActivityHistory sessions={timer.state.completed} onDelete={timer.remove}/>
-    <footer className="mt-8 flex flex-wrap justify-between gap-3 text-xs leading-relaxed text-slate-500"><p>Small steps. Meaningful progress.</p><p>Local storage only · No account needed</p></footer>
+    <footer className="mt-8 flex flex-wrap justify-between gap-3 text-xs leading-relaxed text-slate-500"><p>Small steps. Meaningful progress.</p><p>Habits and sessions are saved on this device.</p></footer>
     </main></div>;
 }
