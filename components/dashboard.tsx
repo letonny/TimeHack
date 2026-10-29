@@ -18,6 +18,7 @@ import { QuickLog } from './quick-log';
 import { SegmentHistory } from './segment-history';
 import { SessionReport } from './session-report';
 import { TodayActivityRing } from './today-activity-ring';
+import { NotificationSettings } from './notification-settings';
 
 function SignOutButton() {
   const { pending } = useFormStatus();
@@ -48,6 +49,7 @@ export function Dashboard() {
       <div className="mb-6 text-center" aria-live="polite">{date ? <><p className="mb-4 text-lg text-slate-300 sm:text-xl">{greeting}</p><p className="text-sm font-semibold tracking-[.28em] text-teal-300 sm:text-base">{date.weekday}</p><h1 className="mt-2 text-3xl font-semibold tracking-tight text-white sm:text-5xl">{date.date}</h1></> : <h1 className="text-xl text-slate-400">Loading today…</h1>}</div>
 
       <AccountSettings key={`${timer.state.profile.displayName}:${timer.state.activities.map(activity => `${activity.id}:${activity.name}:${activity.icon}:${activity.color}`).join('|')}`} profile={timer.state.profile} activities={timer.state.activities} ready={timer.ready} onSaveProfile={timer.saveProfile} onSaveActivity={timer.saveActivity} onDeleteActivity={timer.deleteActivity}/>
+      <NotificationSettings />
 
       {timer.error && <p role="alert" className="mb-5 rounded-xl border border-amber-300/30 bg-amber-300/10 p-4 text-sm text-amber-100">{timer.error}</p>}
       {timer.syncError && <div role="alert" className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-300/20 bg-amber-300/5 px-4 py-3 text-xs text-amber-100"><span>{timer.syncError}</span>{timer.conflict ? <button type="button" onClick={timer.useCloudVersion} className="rounded-lg bg-white/10 px-3 py-2 text-teal-100">Back up changes and load cloud version</button> : <button type="button" onClick={timer.retry} className="rounded-lg bg-white/10 px-3 py-2 text-teal-100">Retry sync</button>}</div>}

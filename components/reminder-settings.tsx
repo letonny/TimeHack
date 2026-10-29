@@ -48,7 +48,7 @@ export function ReminderSettings({ habitId, reminder, ready, onSave, onDelete }:
       <div className="min-w-0 flex-1">
         <p className="text-xs font-medium uppercase tracking-[.14em] text-slate-500">Reminder schedule</p>
         <p className="mt-1 text-sm text-slate-300">{reminder ? reminderSummary(reminder) : 'No reminder configured.'}</p>
-        {reminder && <p className="mt-1 text-xs text-amber-200/80">Schedule only—push delivery is not enabled yet.</p>}
+        {reminder && <p className="mt-1 text-xs text-slate-400">Delivery also requires notifications enabled on this device.</p>}
       </div>
       <button type="button" disabled={!ready} onClick={toggleOpen} aria-expanded={open}
         className="rounded-lg border border-white/10 px-3 py-2 text-xs text-teal-200 hover:bg-white/5 disabled:opacity-50">
@@ -67,7 +67,7 @@ export function ReminderSettings({ habitId, reminder, ready, onSave, onDelete }:
     }}>
       <div className="flex items-start gap-3">
         <input id={`reminder-enabled-${habitId}`} type="checkbox" checked={enabled} onChange={event => setEnabled(event.target.checked)} className="mt-1 size-4 accent-teal-300"/>
-        <label htmlFor={`reminder-enabled-${habitId}`} className="text-sm"><span className="font-medium">Enable this schedule</span><span className="mt-1 block text-xs text-slate-500">This saves your preference. Notifications and closed-app delivery arrive in Milestone 4B.</span></label>
+        <label htmlFor={`reminder-enabled-${habitId}`} className="text-sm"><span className="font-medium">Enable this schedule</span><span className="mt-1 block text-xs text-slate-500">Push delivery requires device permission and an active subscription.</span></label>
       </div>
 
       <div className="mt-4 grid gap-3 sm:grid-cols-2">
