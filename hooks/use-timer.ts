@@ -9,8 +9,60 @@ import { deleteReminder as removeReminderFromState, saveReminder as saveReminder
 import { removeCompletedSession, replaceCompletedSession } from '@/lib/session-actions';
 import { loadState, STORAGE_KEY } from '@/lib/storage';
 import { createClient } from '@/lib/supabase/client';
-import { applyChange, fetchCloud } from '@/lib/cloud-repository';
+import { applyChange, fetchCloud, SyncError } from '@/lib/cloud-repository';
 import { canOfferImport, cloudKey, LEGACY_CLAIM_KEY, newCache, nextChange, readCache, revisionKey, writeCache, type Change, type CloudCache } from '@/lib/cloud';
+
+/** Sanitized user-facing label for a sync error, with no server internals. */
+function syncErrorMessage(err: unknown): string {
+  if (err instanceof SyncError) {
+    switch (err.kind) {
+      case 'auth':
+        return 'Sign-in session expired. Please reload the page to sign in again.';
+      case 'permission':
+        return 'A permission error prevented synchronization. Try signing out and back in.';
+      case 'conflict':
+        return 'Another device changed this record. Pending changes remain saved on this device. Choose the cloud version only after reviewing the conflict.';
+      case 'invalid':
+        return err.operation === 'replay'
+          ? `A pending ${err.entityType ?? 'account'} change was rejected by the server. It remains saved on this device so it can be recovered and retried.`
+          : 'A cloud record could not be loaded. Try reloading the page.';
+      case 'schema':
+        return 'The app and cloud schema do not match. Pending changes remain saved on this device. Update the app or contact support.';
+      case 'missing_segments':
+        return 'A cloud session is incomplete. Contact support — your local data is untouched.';
+      case 'network':
+        return 'Cloud sync failed. Changes remain saved for this account on this device. Retry when connected.';
+      default:
+        return 'Cloud sync failed. Changes remain saved for this account on this device. Retry when connected.';
+    }
+  }
+  return 'Cloud sync failed. Changes remain saved for this account on this device. Retry when connected.';
+}
+
+function logSyncDiagnostic(cause: unknown, pendingChanges: number): void {
+  if (process.env.NODE_ENV !== 'development') return;
+  if (cause instanceof SyncError) {
+    console.error('[TimeHack sync]', {
+      operation: cause.operation,
+      resource: cause.resource,
+      code: cause.serverCode ?? 'none',
+      category: cause.kind,
+      retryable: cause.retryable,
+      eventType: cause.entityType,
+      eventAction: cause.action,
+      pendingChanges,
+      pendingChangesPreserved: true,
+    });
+    return;
+  }
+  console.error('[TimeHack sync]', {
+    operation: 'unknown',
+    category: 'unknown',
+    retryable: true,
+    pendingChanges,
+    pendingChangesPreserved: true,
+  });
+}
 
 export function useTimer() {
   const [state, setState] = useState<TimerState>(emptyState);
@@ -64,11 +116,12 @@ export function useTimer() {
         if (mounted) setSyncError('');
       } catch (cause) {
         if (!mounted) return;
-        const stale = typeof cause === 'object' && cause !== null && 'code' in cause && (cause.code === '40001' || cause.code === '23505');
+        logSyncDiagnostic(cause, cacheRef.current?.queue.length ?? 0);
+        const stale = cause instanceof SyncError
+          ? cause.kind === 'conflict'
+          : typeof cause === 'object' && cause !== null && 'code' in cause && (cause.code === '40001' || cause.code === '23505');
         conflictRef.current = stale; setConflict(stale);
-        setSyncError(stale
-          ? 'Another device changed this record. Pending changes remain saved on this device. Choose the cloud version only after reviewing the conflict.'
-          : 'Cloud sync failed. Changes remain saved for this account on this device. Retry when connected.');
+        setSyncError(syncErrorMessage(cause));
       } finally {
         busyRef.current = false;
         if (mounted) setSyncing(false);
