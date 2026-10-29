@@ -13,6 +13,7 @@ const cloudTableColumns: Record<string, Set<string>> = {
   user_profiles: new Set(['user_id']),
   manual_duration_entries: new Set(['id', 'user_id']),
   habit_reminders: new Set(['habit_id', 'user_id']),
+  session_sets: new Set(['id', 'user_id']),
 };
 
 type MockOptions = {
@@ -77,6 +78,7 @@ test('fetchCloud uses a real ordering column for every cloud table', async () =>
   assert.deepEqual(result.revisions, {});
   assert.deepEqual(orders.habit_reminders, ['habit_id']);
   assert.deepEqual(orders.session_segments, ['session_id', 'position']);
+  assert.deepEqual(orders.session_sets, ['id']);
 });
 
 test('the former habit_reminders.id query is classified as PostgreSQL 42703', async () => {
@@ -146,6 +148,18 @@ test('applyChange routes reminder events separately and keeps RPC arguments inta
   assert.equal(rpcs[1].parameters.p_event_id, reminder.eventId);
   assert.equal(rpcs[1].parameters.p_expected_revision, reminder.expectedRevision);
   assert.deepEqual(rpcs[1].parameters.p_payload, reminder.payload);
+});
+
+test('SET and timer correction events route to guarded RPCs with stable IDs', async () => {
+  const cache = newCache('user');
+  const set = nextChange(cache, 'set', 'set-1', 'save', { id: 'set-1', sessionId: 's1', description: 'Squats', segments: [{ startedAt: 1_000, endedAt: null }] });
+  const correction = nextChange(cache, 'session', 's1', 'save', { id: 's1', name: 'Gym', startedAt: 1_000, endedAt: 2_000, segments: [{ kind: 'study', startedAt: 1_000, endedAt: 2_000 }], entryType: 'timer' }, 'correct');
+  const { client, rpcs } = mockClient();
+  await applyChange(client, set);
+  await applyChange(client, correction);
+  assert.deepEqual(rpcs.map(call => call.name), ['apply_timehack_set_change', 'correct_timehack_timer_session']);
+  assert.equal(rpcs[0].parameters.p_event_id, set.eventId);
+  assert.equal(rpcs[1].parameters.p_expected_revision, correction.expectedRevision);
 });
 
 test('failed queue replay reports safe context and leaves the pending event recoverable', async () => {

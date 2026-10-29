@@ -3,12 +3,14 @@ export type Segment = {
     startedAt: number;
     endedAt: number | null;
 };
+export type SessionSet = { id: string; sessionId: string; description: string; segments: { startedAt: number; endedAt: number | null }[] };
 export type Session = {
     id: string;
     name: string;
     startedAt: number | null;
     endedAt: number | null;
     segments: Segment[];
+    sets?: SessionSet[];
     entryType?: 'timer' | 'manual_range' | 'manual_duration';
     localDate?: string | null;
     durationMilliseconds?: number | null;
@@ -69,15 +71,40 @@ export function trackedDuration(session: Session, now: number): number {
 export function isRunning(session: Session): boolean {
     return session.segments.at(-1)?.endedAt === null;
 }
+export function activeSet(session: Session): SessionSet | null {
+    return session.sets?.find(item => item.segments.at(-1)?.endedAt === null) ?? null;
+}
+export function setDuration(item: SessionSet, now: number): number {
+    return item.segments.reduce((total, part) => total + Math.max(0, (part.endedAt ?? now) - part.startedAt), 0);
+}
+export function startSet(state: TimerState, now: number, id: string, description: string, expectedActiveSetId?: string | null): TimerState {
+    const session = state.active;
+    if (!session || !isRunning(session)) return state;
+    if (expectedActiveSetId !== undefined && (activeSet(session)?.id ?? null) !== expectedActiveSetId) return state;
+    const parent = session.segments.at(-1)?.kind === 'break' ? setSegment(state, now).active! : session;
+    const label = description.trim().slice(0, 120) || 'SET';
+    const sets = (parent.sets ?? []).map(item => item.segments.at(-1)?.endedAt === null
+        ? { ...item, segments: item.segments.map(part => part.endedAt === null ? { ...part, endedAt: Math.max(now, part.startedAt) } : part) }
+        : item);
+    return { ...state, active: { ...parent, sets: [...sets, { id, sessionId: session.id, description: label, segments: [{ startedAt: now, endedAt: null }] }] } };
+}
+export function endSet(state: TimerState, now: number): TimerState {
+    const session = state.active;
+    if (!session || !activeSet(session)) return state;
+    return { ...state, active: { ...session, sets: session.sets!.map(item => item.segments.at(-1)?.endedAt === null
+        ? { ...item, segments: item.segments.map(part => part.endedAt === null ? { ...part, endedAt: Math.max(now, part.startedAt) } : part) }
+        : item) } };
+}
 export function start(state: TimerState, name: string, now: number, id: string, activityId: string | null = null): TimerState {
     if (state.active || !name.trim())
         return state;
-    return { ...state, active: { id, name: name.trim(), startedAt: now, endedAt: null, segments: [{ kind: 'study', startedAt: now, endedAt: null }], entryType: 'timer', localDate: null, durationMilliseconds: null, activityId, note: '' } };
+    return { ...state, active: { id, name: name.trim(), startedAt: now, endedAt: null, segments: [{ kind: 'study', startedAt: now, endedAt: null }], sets: [], entryType: 'timer', localDate: null, durationMilliseconds: null, activityId, note: '' } };
 }
 export function pause(state: TimerState, now: number): TimerState {
     if (!state.active || !isRunning(state.active))
         return state;
-    return { ...state, active: { ...state.active, segments: state.active.segments.map(segment => segment.endedAt === null ? { ...segment, endedAt: Math.max(now, segment.startedAt) } : segment) } };
+    const closed = endSet(state, now).active!;
+    return { ...state, active: { ...closed, segments: closed.segments.map(segment => segment.endedAt === null ? { ...segment, endedAt: Math.max(now, segment.startedAt) } : segment) } };
 }
 export function resume(state: TimerState, now: number): TimerState {
     if (!state.active || isRunning(state.active))

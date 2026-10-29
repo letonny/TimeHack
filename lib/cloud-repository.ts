@@ -76,7 +76,8 @@ type CloudTable =
   | 'activities'
   | 'user_profiles'
   | 'manual_duration_entries'
-  | 'habit_reminders';
+  | 'habit_reminders'
+  | 'session_sets';
 
 const primaryOrderColumn: Record<CloudTable, string> = {
   habits: 'id',
@@ -86,6 +87,7 @@ const primaryOrderColumn: Record<CloudTable, string> = {
   user_profiles: 'user_id',
   manual_duration_entries: 'id',
   habit_reminders: 'habit_id',
+  session_sets: 'id',
 };
 
 async function allRows(
@@ -118,7 +120,7 @@ async function allRows(
 }
 
 export async function fetchCloud(client: SupabaseClient, userId: string) {
-  const [habits, sessions, segments, activities, profiles, manualDurations, reminders] =
+  const [habits, sessions, segments, activities, profiles, manualDurations, reminders, sets] =
     await Promise.all([
       allRows(client, 'habits', userId),
       allRows(client, 'activity_sessions', userId),
@@ -127,6 +129,7 @@ export async function fetchCloud(client: SupabaseClient, userId: string) {
       allRows(client, 'user_profiles', userId),
       allRows(client, 'manual_duration_entries', userId),
       allRows(client, 'habit_reminders', userId),
+      allRows(client, 'session_sets', userId),
     ]);
   try {
     return mapRows(
@@ -138,6 +141,7 @@ export async function fetchCloud(client: SupabaseClient, userId: string) {
       profiles as Parameters<typeof mapRows>[5],
       manualDurations as Parameters<typeof mapRows>[6],
       reminders as Parameters<typeof mapRows>[7],
+      sets as Parameters<typeof mapRows>[8],
     );
   } catch (cause) {
     const message = cause instanceof Error ? cause.message : String(cause);
@@ -152,7 +156,11 @@ export async function fetchCloud(client: SupabaseClient, userId: string) {
 
 export async function applyChange(client: SupabaseClient, change: Change): Promise<number> {
   const rpcName =
-    change.entityType === 'reminder'
+    change.operation === 'correct'
+      ? 'correct_timehack_timer_session'
+      : change.entityType === 'set'
+      ? 'apply_timehack_set_change'
+      : change.entityType === 'reminder'
       ? 'apply_timehack_reminder_change'
       : 'apply_timehack_change';
   const { data, error } = await client.rpc(rpcName, {

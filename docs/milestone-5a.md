@@ -1,0 +1,16 @@
+# Milestone 5A deployment and device check
+
+Apply `supabase/migrations/20261029020000_milestone_5a_session_sets.sql` to an isolated database first, then to hosted Supabase **before** deploying the updated client. The new client fetches `session_sets` during account sync. The migration is additive: it creates SET and event tables and two guarded RPC functions. It does not rewrite earlier migrations or existing rows. Do not deploy this client until the migration is present.
+
+The new SET stopwatch records independent intervals linked to a timer session. Parent activity time remains the source for the daily ring and habits; SET intervals are annotations and are not added to totals. Existing study/break segments retain their original meaning. Pause and Finish close an active SET, while Resume restarts only the parent timer. The pending queue replays SET closure before the parent Pause or Finish. A deferred database check also rejects older-client parent transitions that would strand an open SET. Starting another SET closes the previous one. Completed timer date/time corrections use a separate RPC with a revision check and preserve all middle segments. They can adjust only the first start and last end. A correction that would exclude a SET is rejected.
+
+## Local and installed iPhone check
+
+1. Start the app with `npm run dev` and sign in. Use a Supabase project or isolated local database where the 5A migration has been applied. `localhost:3000` on a computer is not directly reachable from an iPhone; use a secure HTTPS development URL or a deployed preview for the installed Home Screen PWA.
+2. On **Timer**, enter `Gym` and tap **Start Timer** once. The main heading and timer should say Gym. Tap **Start SET** once with `Squats` as the description. Both clocks should advance. Tap **Next SET** with `Rest`; the Squats interval should close. Tap **End SET** once, then **Pause**, **Resume**, and **Finish**, once each.
+3. Refresh and open **History**. The Gym session and its SET descriptions should remain. Edit the completed session to correct its date or times, then refresh again. Confirm the daily ring, calendar, and habit progress reflect the change. Test an overnight correction using the next date for the end time.
+4. Add a previous-day manual entry using both **Start & end** and **Duration only**. Each **Save entry** tap should create one record. Rapid taps should not duplicate it. Duration-only records should continue to show “Time not specified.”
+5. Start another timer, switch among all five navigation screens, and return to **Timer**. The elapsed activity time must continue. Check the live 24-hour ring on **Home** while the timer runs.
+6. On the installed iPhone PWA, repeat the single-tap sequence with the keyboard open and closed. Check the status after each action; no success should appear before the local write succeeds. Verify the session and SETs on a second signed-in device. Check existing habits, reminder settings, and device notifications in **Settings**.
+
+If a sync warning appears, do not clear browser storage. Record the failing table or RPC and sanitized error code from development diagnostics, then preserve the pending queue for recovery.

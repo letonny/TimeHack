@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { emptyState, setSegment, pause, resume, start, stop, type Activity, type Habit, type HabitReminder, type Profile, type Session, type TimerState } from '@/lib/timer';
+import { emptyState, endSet, pause, resume, start, startSet, stop, type Activity, type Habit, type HabitReminder, type Profile, type Session, type TimerState } from '@/lib/timer';
 import { saveHabit } from '@/lib/habits';
 import { activityForName, saveActivity } from '@/lib/activity-metadata';
 import { validateDisplayName } from '@/lib/personalization';
@@ -10,7 +10,7 @@ import { removeCompletedSession, replaceCompletedSession } from '@/lib/session-a
 import { loadState, STORAGE_KEY } from '@/lib/storage';
 import { createClient } from '@/lib/supabase/client';
 import { applyChange, fetchCloud, SyncError } from '@/lib/cloud-repository';
-import { canOfferImport, cloudKey, LEGACY_CLAIM_KEY, newCache, nextChange, readCache, revisionKey, writeCache, type Change, type CloudCache } from '@/lib/cloud';
+import { canOfferImport, cloudKey, LEGACY_CLAIM_KEY, newCache, nextChange, readCache, revisionKey, sessionChanges, writeCache, type Change, type CloudCache } from '@/lib/cloud';
 
 /** Sanitized user-facing label for a sync error, with no server internals. */
 function syncErrorMessage(err: unknown): string {
@@ -168,7 +168,8 @@ export function useTimer() {
     return () => { mounted = false; clearInterval(clock); clearInterval(interval); window.removeEventListener('storage', storage); document.removeEventListener('visibilitychange', visible); listener.subscription.unsubscribe(); };
   }, []);
 
-  function commit(next: TimerState, entityType: Change['entityType'], entityId: string, action: 'save' | 'delete', payload: Change['payload']) {
+  function commitBatch(next: TimerState, changes: Pick<Change, 'entityType' | 'entityId' | 'action' | 'payload' | 'operation'>[]) {
+    if (!changes.length) return false;
     const cache = cacheRef.current;
     if (!ready || !cache || conflictRef.current || cache.userId !== userRef.current) return false;
     try {
@@ -178,15 +179,22 @@ export function useTimer() {
         setError('Another tab changed this account. The latest saved data is loaded; please try your action again.');
         return false;
       }
-      const updated: CloudCache = { ...cache, state: next, queue: [...cache.queue, nextChange(cache, entityType, entityId, action, payload)] };
+      const normalized: TimerState = { ...next,
+        active: next.active ? { ...next.active, sets: next.active.sets ?? [] } : null,
+        completed: next.completed.map(item => ({ ...item, sets: item.sets ?? [] })) };
+      const updated: CloudCache = { ...cache, state: normalized, queue: [...cache.queue] };
+      for (const change of changes) updated.queue.push(nextChange(updated, change.entityType, change.entityId, change.action, change.payload, change.operation));
       writeCache(window.localStorage, updated);
-      cacheRef.current = updated; setState(next); setPending(updated.queue.length); setNow(Date.now()); setError('');
+      cacheRef.current = updated; setState(normalized); setPending(updated.queue.length); setNow(Date.now()); setError('');
       void syncRef.current();
       return true;
     } catch {
       setError('Your change could not be saved on this device. Check browser storage permissions or available space.');
       return false;
     }
+  }
+  function commit(next: TimerState, entityType: Change['entityType'], entityId: string, action: 'save' | 'delete', payload: Change['payload']) {
+    return commitBatch(next, [{ entityType, entityId, action, payload }]);
   }
   function sessionUpdate(transform: (state: TimerState, time: number) => TimerState, createdId?: string) {
     const cache = cacheRef.current;
@@ -195,7 +203,7 @@ export function useTimer() {
     if (next === cache.state) return false;
     const id = createdId ?? cache.state.active?.id;
     const session = next.active?.id === id ? next.active : next.completed.find(item => item.id === id);
-    return id && session ? commit(next, 'session', id, 'save', session) : false;
+    return id && session ? commitBatch(next, sessionChanges(cache.state.active, session)) : false;
   }
   async function importLegacy() {
     const userId = userRef.current, client = clientRef.current, cache = cacheRef.current;
@@ -247,10 +255,11 @@ export function useTimer() {
     retry: () => { if (!userRef.current) window.location.reload(); else { conflictRef.current = false; setConflict(false); void syncRef.current(); } },
     previewLegacy, importLegacy, useCloudVersion,
     start: (name: string) => { const id = crypto.randomUUID(); return sessionUpdate((current, time) => { const activity = activityForName(current, name); return start(current, name, time, id, activity.id || null); }, id); },
-    set: () => sessionUpdate(setSegment), pause: () => sessionUpdate(pause), resume: () => sessionUpdate(resume),
+    set: (description = 'SET', expectedActiveSetId: string | null = null) => { const id = crypto.randomUUID(); return sessionUpdate((current, time) => startSet(current, time, id, description, expectedActiveSetId)); },
+    endSet: () => sessionUpdate(endSet), pause: () => sessionUpdate(pause), resume: () => sessionUpdate(resume),
     stop: (note = '') => sessionUpdate((current, time) => { const next = stop(current, time); if (next === current || !next.completed[0]) return next; return { ...next, completed: [{ ...next.completed[0], note: note.trim().slice(0, 2000) }, ...next.completed.slice(1)] }; }),
     logManual: (session: Session) => { const cache = cacheRef.current; if (!cache || cache.state.active?.id === session.id || cache.state.completed.some(item => item.id === session.id)) return false; return commit({ ...cache.state, completed: [session, ...cache.state.completed] }, 'session', session.id, 'save', session); },
-    updateSession: (session: Session) => { try { const cache = cacheRef.current; if (!cache) return false; return commit(replaceCompletedSession(cache.state, session), 'session', session.id, 'save', session); } catch { return false; } },
+    updateSession: (session: Session) => { try { const cache = cacheRef.current; if (!cache) return false; const before = cache.state.completed.find(item => item.id === session.id) ?? null; const changes = sessionChanges(before, session); if (before?.entryType === 'timer' && (before.startedAt !== session.startedAt || before.endedAt !== session.endedAt || JSON.stringify(before.segments) !== JSON.stringify(session.segments))) { const parent = changes.find(item => item.entityType === 'session'); if (parent) parent.operation = 'correct'; } return commitBatch(replaceCompletedSession(cache.state, session), changes); } catch { return false; } },
     saveHabit: (habit: Habit) => { try { const cache = cacheRef.current; if (!cache) return false; const next = saveHabit(cache.state, habit); return commit(next, 'habit', habit.id, 'save', next.habits.find(item => item.id === habit.id)!); } catch (cause) { setError(cause instanceof Error ? cause.message : 'Invalid habit'); return false; } },
     deleteHabit: (id: string) => {
       let cache = cacheRef.current;

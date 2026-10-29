@@ -1,10 +1,11 @@
-import { emptyState, type Activity, type Habit, type HabitReminder, type Profile, type Session, type TimerState, type Weekday } from './timer.ts';
+import { emptyState, type Activity, type Habit, type HabitReminder, type Profile, type Session, type SessionSet, type TimerState, type Weekday } from './timer.ts';
 import { validateReminder } from './reminders.ts';
 
 export type Change = {
-  eventId: string; entityType: 'habit' | 'session' | 'activity' | 'profile' | 'reminder'; entityId: string;
+  eventId: string; entityType: 'habit' | 'session' | 'activity' | 'profile' | 'reminder' | 'set'; entityId: string;
   action: 'save' | 'delete' | 'import'; expectedRevision: number;
-  payload: Habit | Session | Activity | Profile | HabitReminder | Record<string, never>; occurredAt: string;
+  operation?: 'correct';
+  payload: Habit | Session | SessionSet | Activity | Profile | HabitReminder | Record<string, never>; occurredAt: string;
 };
 export type CloudCache = { version: 1; userId: string; state: TimerState; revisions: Record<string, number>; queue: Change[] };
 export const cloudKey = (userId: string) => `timehack.cloud.v1.${userId}`;
@@ -22,18 +23,35 @@ export function readCache(storage: Pick<Storage, 'getItem'>, userId: string): Cl
   if (!Array.isArray(parsed.state.reminders)) throw new Error('Invalid reminder cache');
   parsed.state.reminders = parsed.state.reminders.map(validateReminder);
   parsed.state.profile ??= { displayName: '' };
-  parsed.state.completed = parsed.state.completed.map(session => ({ entryType: 'timer', localDate: null, durationMilliseconds: null, activityId: null, note: '', ...session }));
-  if (parsed.state.active) parsed.state.active = { entryType: 'timer', localDate: null, durationMilliseconds: null, activityId: null, note: '', ...parsed.state.active };
+  parsed.state.completed = parsed.state.completed.map(session => ({ entryType: 'timer' as const, localDate: null, durationMilliseconds: null, activityId: null, note: '', ...session, sets: session.sets ?? [] }));
+  if (parsed.state.active) parsed.state.active = { entryType: 'timer', localDate: null, durationMilliseconds: null, activityId: null, note: '', ...parsed.state.active, sets: parsed.state.active.sets ?? [] };
   return parsed;
 }
 export function writeCache(storage: Pick<Storage, 'setItem'>, cache: CloudCache) {
   storage.setItem(cloudKey(cache.userId), JSON.stringify(cache));
 }
-export function nextChange(cache: CloudCache, entityType: Change['entityType'], entityId: string, action: Change['action'], payload: Change['payload']): Change {
+export function nextChange(cache: CloudCache, entityType: Change['entityType'], entityId: string, action: Change['action'], payload: Change['payload'], operation?: Change['operation']): Change {
   const key = revisionKey(entityType, entityId);
   return { eventId: crypto.randomUUID(), entityType, entityId, action,
     expectedRevision: (cache.revisions[key] ?? 0) + cache.queue.filter(item => item.entityType === entityType && item.entityId === entityId).length,
-    payload, occurredAt: new Date().toISOString() };
+    payload, occurredAt: new Date().toISOString(), ...(operation ? { operation } : {}) };
+}
+export function sessionChanges(before: Session | null, after: Session | null): Pick<Change, 'entityType' | 'entityId' | 'action' | 'payload' | 'operation'>[] {
+  if (!after) return [];
+  const changes: Pick<Change, 'entityType' | 'entityId' | 'action' | 'payload' | 'operation'>[] = [];
+  const changedSets = (after.sets ?? []).filter(item => {
+    const old = before?.sets?.find(previous => previous.id === item.id);
+    return !old || JSON.stringify(old) !== JSON.stringify(item);
+  });
+  // Close existing SETs before pausing/finishing the parent. Create new SETs
+  // after a parent transition (including a legacy break -> study transition).
+  for (const item of changedSets.filter(item => before?.sets?.some(old => old.id === item.id)))
+    changes.push({ entityType: 'set', entityId: item.id, action: 'save', payload: item });
+  if (!before || JSON.stringify({ ...before, sets: undefined }) !== JSON.stringify({ ...after, sets: undefined }))
+    changes.push({ entityType: 'session', entityId: after.id, action: 'save', payload: after });
+  for (const item of changedSets.filter(item => !before?.sets?.some(old => old.id === item.id)))
+    changes.push({ entityType: 'set', entityId: item.id, action: 'save', payload: item });
+  return changes;
 }
 type HabitRow = { user_id: string; id: string; name: string; goal_minutes: number; revision: number; deleted_at: string | null };
 type SessionRow = { user_id: string; id: string; name: string; started_at: string; ended_at: string | null; revision: number; deleted_at: string | null; entry_type?: 'timer' | 'manual_range'; activity_id?: string | null; note?: string | null };
@@ -42,8 +60,9 @@ type SegmentRow = { user_id: string; session_id: string; position: number; kind:
 type ActivityRow = { user_id: string; id: string; name: string; icon: string; color: string; revision: number; deleted_at: string | null };
 type ProfileRow = { user_id: string; display_name: string; revision: number };
 type ReminderRow = { user_id: string; habit_id: string; enabled: boolean; local_time: string; time_zone: string; weekday_mask: number; skip_if_goal_complete: boolean; revision: number; deleted_at: string | null };
-export function mapRows(userId: string, habits: HabitRow[], sessions: SessionRow[], segments: SegmentRow[], activities: ActivityRow[] = [], profiles: ProfileRow[] = [], manualDurations: ManualDurationRow[] = [], reminders: ReminderRow[] = []): Pick<CloudCache, 'state' | 'revisions'> {
-  if ([...habits, ...sessions, ...segments, ...activities, ...profiles, ...manualDurations, ...reminders].some(row => row.user_id !== userId)) throw new Error('Account data mismatch');
+type SetRow = { user_id: string; id: string; session_id: string; description: string; segments: { startedAt: number; endedAt: number | null }[]; revision: number; deleted_at: string | null };
+export function mapRows(userId: string, habits: HabitRow[], sessions: SessionRow[], segments: SegmentRow[], activities: ActivityRow[] = [], profiles: ProfileRow[] = [], manualDurations: ManualDurationRow[] = [], reminders: ReminderRow[] = [], sets: SetRow[] = []): Pick<CloudCache, 'state' | 'revisions'> {
+  if ([...habits, ...sessions, ...segments, ...activities, ...profiles, ...manualDurations, ...reminders, ...sets].some(row => row.user_id !== userId)) throw new Error('Account data mismatch');
   const revisions: Record<string, number> = {};
   const state = emptyState();
   for (const row of habits) {
@@ -67,7 +86,7 @@ export function mapRows(userId: string, habits: HabitRow[], sessions: SessionRow
     if (!parts.length) throw new Error('A cloud session is missing its segments');
     const session: Session = { id: row.id, name: row.name, startedAt: Date.parse(row.started_at), endedAt: row.ended_at ? Date.parse(row.ended_at) : null,
       segments: parts.map(part => ({ kind: part.kind, startedAt: Date.parse(part.started_at), endedAt: part.ended_at ? Date.parse(part.ended_at) : null })),
-      entryType, localDate: null, durationMilliseconds: null, activityId: row.activity_id ?? null, note: row.note ?? '' };
+      entryType, localDate: null, durationMilliseconds: null, activityId: row.activity_id ?? null, note: row.note ?? '', sets: [] };
     if (entryType === 'timer' && session.endedAt === null) {
       if (state.active) throw new Error('Multiple active cloud sessions');
       state.active = session;
@@ -89,6 +108,16 @@ export function mapRows(userId: string, habits: HabitRow[], sessions: SessionRow
       localTime: row.local_time.slice(0, 5), timeZone: row.time_zone, weekdays,
       skipIfGoalComplete: row.skip_if_goal_complete });
   }
+  for (const row of sets) {
+    revisions[revisionKey('set', row.id)] = row.revision;
+    if (row.deleted_at) continue;
+    const session = state.active?.id === row.session_id ? state.active : state.completed.find(item => item.id === row.session_id);
+    if (!session) continue;
+    if (!Array.isArray(row.segments)) throw new Error('Invalid SET intervals');
+    session.sets ??= [];
+    session.sets.push({ id: row.id, sessionId: row.session_id, description: row.description, segments: row.segments });
+  }
+  for (const session of [...state.completed, ...(state.active ? [state.active] : [])]) session.sets?.sort((a, b) => a.segments[0].startedAt - b.segments[0].startedAt);
   const order = (session: Session) => session.endedAt ?? (session.localDate ? new Date(`${session.localDate}T23:59:59`).getTime() : 0);
   state.completed.sort((a, b) => order(b) - order(a));
   return { state, revisions };
