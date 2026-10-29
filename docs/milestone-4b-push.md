@@ -1,14 +1,14 @@
 # Milestone 4B push setup
 
-Push delivery is intentionally off until the migration, Edge Function, secrets, and Cron are configured. The browser never receives the VAPID private key or Supabase service role key. This change does not alter the existing sync queue or 4A reminder rows.
+The 4B migration has been applied to hosted Supabase. Do not run it again. Push delivery remains off until the Edge Function and Cron are deployed and activated. The browser never receives the VAPID private key or Supabase service role key. This change does not alter the existing sync queue or 4A reminder rows.
 
 ## Keys and deployment
 
 1. Generate one VAPID key pair in a trusted terminal: `npx web-push generate-vapid-keys --json`. Save both values in a password manager; do not commit them. The public key goes in Vercel and `.env.local` as `NEXT_PUBLIC_VAPID_PUBLIC_KEY`. Set `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, and `VAPID_SUBJECT` (a `mailto:` contact) as Supabase Edge Function secrets. The same pair must remain stable; rotating it requires devices to subscribe again.
 2. Generate a long random `TIMEHACK_WORKER_SECRET` with a password manager or `openssl rand -base64 48`. Set it as a Supabase Edge Function secret. Store the same value in Supabase Vault as `timehack_worker_secret`. Do not put it in browser or Vercel public variables.
-3. Review and apply `20261029010000_milestone_4b_push.sql` with your normal Supabase migration workflow after backing up the project. This migration is additive. Do not edit earlier migrations.
-4. Deploy with `npx supabase functions deploy timehack-push --no-verify-jwt`. `supabase/config.toml` also records this mode. The function validates either a signed user's bearer token for test pushes or the private worker secret for scheduled delivery. Supabase injects `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY` into Edge Functions; confirm they are available in your project. Keep the service role key out of Vercel and browser bundles.
-5. Redeploy the website with the public VAPID key and install/enable notifications on a test device. Use the rate-limited “Send test notification” button before enabling Cron.
+3. Confirm the already-applied migration `20261029010000_milestone_4b_push.sql` is listed in remote migration history. Do not reapply or edit it.
+4. Deploy with `npx supabase functions deploy timehack-push --no-verify-jwt`. `supabase/config.toml` also records this mode. Gateway JWT verification must be off because the Cron request has a private worker secret rather than a user JWT. The function verifies that secret on scheduled calls, or calls Supabase Auth `getUser` with the bearer JWT on user test calls. Supabase injects `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY` into Edge Functions; confirm they are available in your project. Keep the service role key out of Vercel and browser bundles.
+5. Redeploy the website after setting `NEXT_PUBLIC_VAPID_PUBLIC_KEY` in Vercel Production. Next.js embeds public environment variables at build time; changing the setting alone does not update an existing iPhone installation's JavaScript. Reopen the installed PWA after the new website deployment, then use the rate-limited “Send test notification” button before enabling Cron.
 
 The Edge Function uses the maintained `web-push` package for RFC 8291 encryption and VAPID. Supported push services are Apple, Firebase, Mozilla, and Windows Notification Service HTTPS endpoints. Unknown endpoint hosts are rejected to prevent server-side requests to arbitrary hosts.
 
@@ -37,7 +37,7 @@ To pause delivery, run `select cron.unschedule('timehack-habit-push-every-minute
 
 Cron calls the worker every minute. A reminder is eligible during the 15 minutes after its resolved scheduled instant. The shared 4A resolver chooses the first occurrence of a repeated wall time and the first valid minute after a DST gap. The 4A candidate view excludes disabled/deleted reminders and soft-deleted habits. A service-only SQL function checks completed study intervals and duration entries for the habit's local day before suppression.
 
-`push_deliveries` has one row per device, habit, local date, and kind. An atomic claim prevents simultaneous sends from overlapping workers. A failed or timed-out claim can be retried after two minutes, up to three attempts. A network timeout may mean the push service accepted a notification that the worker could not confirm, so a retry can duplicate a notification. A `404` or `410` response expires that device subscription. There is no promise of exact-once external delivery. Test pushes are limited to one request per account per minute and do not reveal subscription credentials.
+`push_deliveries` has one row per device, habit, local date, and kind. An atomic claim prevents simultaneous sends from overlapping workers. A failed or timed-out claim can be retried after two minutes, up to three attempts. A network timeout may mean the push service accepted a notification that the worker could not confirm, so a retry can duplicate a notification. A `404` or `410` response expires that device subscription. There is no promise of exact-once external delivery. Test pushes are limited to one request per account per minute and do not reveal subscription credentials. The service worker compares each push's account ID with the account last signed into the PWA and suppresses messages for another account.
 
 ## Local and iPhone checks
 

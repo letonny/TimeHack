@@ -65,7 +65,7 @@ Deno.serve(async (request) => {
       }
       let status = 0;
       try {
-        const payload = JSON.stringify({ habitId, tag: kind === 'test' ? 'timehack-test' : `timehack-${habitId}-${localDate}` });
+        const payload = JSON.stringify({ userId: sub.user_id, habitId, tag: kind === 'test' ? 'timehack-test' : `timehack-${habitId}-${localDate}` });
         const response = await webpush.sendNotification({ endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth_key } }, payload, { TTL: 3600, timeout: 10000 });
         status = response.statusCode;
         sent++;

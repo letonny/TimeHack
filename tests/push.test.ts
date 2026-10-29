@@ -37,9 +37,20 @@ test('service worker uses privacy-conscious payload and safe same-origin habit l
   const handlers: Record<string, (event: Record<string, unknown>) => void> = {};
   let shown: { title: string; options: Record<string, unknown> } | undefined;
   let navigated = '';
+  let account = 'u1';
+  const database = { close: () => {}, transaction: () => ({ objectStore: () => ({ get: () => {
+    const request: { result: string; onsuccess?: () => void } = { result: account };
+    queueMicrotask(() => request.onsuccess?.());
+    return request;
+  } }) }) };
+  const indexedDB = { open: () => {
+    const request: { result: typeof database; onsuccess?: () => void } = { result: database };
+    queueMicrotask(() => request.onsuccess?.());
+    return request;
+  } };
   const worker = readFileSync('public/sw.js', 'utf8');
   runInNewContext(worker, {
-    URL, encodeURIComponent,
+    URL, encodeURIComponent, indexedDB,
     self: {
       location: { origin: 'https://timehack.example' },
       addEventListener: (name: string, handler: (event: Record<string, unknown>) => void) => { handlers[name] = handler; },
@@ -48,7 +59,7 @@ test('service worker uses privacy-conscious payload and safe same-origin habit l
     },
   });
   let work: Promise<unknown> = Promise.resolve();
-  handlers.push({ data: { json: () => ({ habitId: 'h1', title: 'Private study details' }) }, waitUntil: (promise: Promise<unknown>) => { work = promise; } });
+  handlers.push({ data: { json: () => ({ userId: 'u1', habitId: 'h1', title: 'Private study details' }) }, waitUntil: (promise: Promise<unknown>) => { work = promise; } });
   await work;
   assert.equal(shown?.title, 'TimeHack reminder');
   assert.equal(shown?.options.body, 'A habit is ready for your attention.');
@@ -56,6 +67,10 @@ test('service worker uses privacy-conscious payload and safe same-origin habit l
   handlers.notificationclick({ notification, waitUntil: (promise: Promise<unknown>) => { work = promise; } });
   await work;
   assert.equal(navigated, 'https://timehack.example/#habit-h1');
+  account = 'u2'; shown = undefined;
+  handlers.push({ data: { json: () => ({ userId: 'u1', habitId: 'h1' }) }, waitUntil: (promise: Promise<unknown>) => { work = promise; } });
+  await work;
+  assert.equal(shown, undefined, 'a previous account must not display a push after account switch');
   assert.ok(!worker.includes('caches.open'));
 });
 

@@ -23,6 +23,9 @@ export function NotificationSettings() {
     let active = true;
     const update = async () => {
       const available = 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+      const { data: owner } = await client.auth.getUser();
+      const worker = await navigator.serviceWorker?.getRegistration('/');
+      worker?.active?.postMessage({ type: 'timehack-account', userId: owner.user?.id ?? '' });
       let deviceSubscribed = false;
       if (available && Notification.permission === 'granted') {
         const registration = await navigator.serviceWorker.getRegistration('/');
@@ -53,15 +56,30 @@ export function NotificationSettings() {
       if (choice !== 'granted') throw new Error('Notifications are blocked. Allow them in your browser or device settings.');
       const registration = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
       const ready = await navigator.serviceWorker.ready;
-      const subscription = await ready.pushManager.getSubscription() ?? await ready.pushManager.subscribe({
+      const { data: owner } = await client.auth.getUser();
+      if (!owner.user) throw new Error('Sign in before enabling notifications.');
+      ready.active?.postMessage({ type: 'timehack-account', userId: owner.user.id });
+      let subscription = await ready.pushManager.getSubscription() ?? await ready.pushManager.subscribe({
         userVisibleOnly: true, applicationServerKey: applicationServerKey(publicKey),
       });
-      const value = subscription.toJSON();
-      if (!value.keys?.p256dh || !value.keys.auth) throw new Error('The device did not provide push encryption keys.');
-      const { error } = await client.rpc('save_timehack_push_subscription', {
-        p_endpoint: subscription.endpoint, p_p256dh: value.keys.p256dh,
-        p_auth: value.keys.auth, p_label: navigator.platform.slice(0, 80),
-      });
+      const save = async () => {
+        const value = subscription.toJSON();
+        if (!value.keys?.p256dh || !value.keys.auth) throw new Error('The device did not provide push encryption keys.');
+        return client.rpc('save_timehack_push_subscription', {
+          p_endpoint: subscription.endpoint, p_p256dh: value.keys.p256dh,
+          p_auth: value.keys.auth, p_label: navigator.platform.slice(0, 80),
+        });
+      };
+      let { error } = await save();
+      if (error?.code === '42501') {
+        // The browser still holds a different account's endpoint. A fresh
+        // subscription is created only after this account's explicit click.
+        await subscription.unsubscribe();
+        subscription = await ready.pushManager.subscribe({
+          userVisibleOnly: true, applicationServerKey: applicationServerKey(publicKey),
+        });
+        ({ error } = await save());
+      }
       if (error) throw new Error('The subscription could not be saved for this account.');
       setSubscribed(true); setMessage('Notifications enabled on this device.');
       void registration.update();
