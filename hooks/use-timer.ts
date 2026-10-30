@@ -10,7 +10,7 @@ import { removeCompletedSession, replaceCompletedSession } from '@/lib/session-a
 import { loadState, STORAGE_KEY } from '@/lib/storage';
 import { createClient } from '@/lib/supabase/client';
 import { applyChange, fetchCloud, SyncError } from '@/lib/cloud-repository';
-import { canOfferImport, cloudKey, LEGACY_CLAIM_KEY, newCache, nextChange, readCache, revisionKey, sessionChanges, writeCache, type Change, type CloudCache } from '@/lib/cloud';
+import { canOfferImport, cloudKey, LEGACY_CLAIM_KEY, newCache, nextChange, readCache, revisionKey, writeCache, type Change, type CloudCache } from '@/lib/cloud';
 
 /** Sanitized user-facing label for a sync error, with no server internals. */
 function syncErrorMessage(err: unknown): string {
@@ -195,6 +195,20 @@ export function useTimer() {
   }
   function commit(next: TimerState, entityType: Change['entityType'], entityId: string, action: 'save' | 'delete', payload: Change['payload']) {
     return commitBatch(next, [{ entityType, entityId, action, payload }]);
+  }
+  function sessionChanges(before: Session | null, after: Session | null): Pick<Change, 'entityType' | 'entityId' | 'action' | 'payload' | 'operation'>[] {
+    if (!after) return [];
+    const changes: Pick<Change, 'entityType' | 'entityId' | 'action' | 'payload' | 'operation'>[] = [];
+    const parentBefore = before && { ...before, sets: undefined };
+    const parentAfter = { ...after, sets: undefined };
+    if (!before || JSON.stringify(parentBefore) !== JSON.stringify(parentAfter))
+      changes.push({ entityType: 'session', entityId: after.id, action: 'save', payload: after });
+    for (const item of after.sets ?? []) {
+      const old = before?.sets?.find(previous => previous.id === item.id);
+      if (!old || JSON.stringify(old) !== JSON.stringify(item))
+        changes.push({ entityType: 'set', entityId: item.id, action: 'save', payload: item });
+    }
+    return changes;
   }
   function sessionUpdate(transform: (state: TimerState, time: number) => TimerState, createdId?: string) {
     const cache = cacheRef.current;

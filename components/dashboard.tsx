@@ -5,19 +5,18 @@ import Link from 'next/link';
 import { useFormStatus } from 'react-dom';
 import { logout } from '@/app/auth/actions';
 import { useTimer } from '@/hooks/use-timer';
-import { buildDayTimeline, formatDashboardDate, localDayKey } from '@/lib/analytics';
-import { greetingFor } from '@/lib/personalization';
-import { activeSet, formatCompletedDuration, isRunning } from '@/lib/timer';
+import { formatDashboardDate, localDayKey } from '@/lib/analytics';
+import { activeSet, isRunning } from '@/lib/timer';
 import { AccountSettings } from './account-settings';
 import { ActivityCalendar } from './activity-calendar';
 import { ActivityHistory } from './activity-history';
 import { HabitTracker } from './habit-tracker';
+import { HomeDashboard } from './home-dashboard';
 import { DailyTimeline } from './daily-timeline';
 import { LiveSessionTimer } from './live-session-timer';
 import { QuickLog } from './quick-log';
 import { SegmentHistory } from './segment-history';
 import { SessionReport } from './session-report';
-import { TodayActivityRing } from './today-activity-ring';
 import { NotificationSettings } from './notification-settings';
 
 function SignOutButton() {
@@ -38,7 +37,6 @@ export function Dashboard() {
   const currentSet = active ? activeSet(active) : null;
   const onBreak = active?.segments.at(-1)?.kind === 'break';
   const date = timer.now === null ? null : formatDashboardDate(timer.now);
-  const greeting = timer.now === null ? null : greetingFor(timer.now, timer.state.profile.displayName);
   const recentSession = recentSessionId ? timer.state.completed.find(session => session.id === recentSessionId) : null;
   const syncLabel = timer.syncing ? 'Syncing' : timer.pending ? `${timer.pending} pending` : timer.syncError ? 'Sync issue' : timer.ready ? 'Synced' : 'Loading';
 
@@ -49,13 +47,13 @@ export function Dashboard() {
     </div></header>
 
     <main className="mx-auto max-w-6xl px-5 py-7 pb-28 sm:px-8 sm:py-9 sm:pb-32">
-      <div className="mb-6 text-center" aria-live="polite">{date ? <><p className="mb-4 text-lg text-slate-300 sm:text-xl">{screen === 'home' ? greeting : screen[0].toUpperCase() + screen.slice(1)}</p><p className="text-sm font-semibold tracking-[.28em] text-teal-300 sm:text-base">{date.weekday}</p><h1 className="mt-2 text-3xl font-semibold tracking-tight text-white sm:text-5xl">{date.date}</h1></> : <h1 className="text-xl text-slate-400">Loading today…</h1>}</div>
+      {screen !== 'home' && <div className="mb-6 text-center" aria-live="polite">{date ? <><p className="text-lg text-slate-300 sm:text-xl">{screen[0].toUpperCase() + screen.slice(1)}</p><p className="mt-3 text-xs font-semibold tracking-[.22em] text-teal-300">{date.weekday}</p><h1 className="mt-1 text-2xl font-semibold tracking-tight text-white sm:text-3xl">{date.date}</h1></> : <h1 className="text-xl text-slate-400">Loading today…</h1>}</div>}
 
       {timer.error && <p role="alert" className="mb-5 rounded-xl border border-amber-300/30 bg-amber-300/10 p-4 text-sm text-amber-100">{timer.error}</p>}
       {timer.syncError && <div role="alert" className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-300/20 bg-amber-300/5 px-4 py-3 text-xs text-amber-100"><span>{timer.syncError}</span>{timer.conflict ? <button type="button" onClick={timer.useCloudVersion} className="rounded-lg bg-white/10 px-3 py-2 text-teal-100">Back up changes and load cloud version</button> : <button type="button" onClick={timer.retry} className="rounded-lg bg-white/10 px-3 py-2 text-teal-100">Retry sync</button>}</div>}
       {timer.legacyAvailable && <details className="mb-5 rounded-xl border border-white/8 bg-white/[.025] px-4 py-3 text-xs text-slate-400"><summary className="cursor-pointer text-slate-300">Older browser data is available</summary><div className="mt-3"><p>Review this only if this browser profile is yours. Original local data will be preserved.</p><button type="button" disabled={!timer.ready || timer.pending > 0 || timer.syncing} onClick={timer.previewLegacy} className="mt-3 rounded-lg bg-white/10 px-3 py-2 text-teal-200">Review browser data</button>{timer.legacyPreview && <div className="mt-3 space-y-2"><p>{timer.legacyPreview.habits.length} habits and {timer.legacyPreview.completed.length + (timer.legacyPreview.active ? 1 : 0)} sessions found.</p><button type="button" disabled={!timer.ready || timer.pending > 0 || timer.syncing} onClick={timer.importLegacy} className="rounded-lg bg-teal-300 px-3 py-2 font-medium text-slate-950">Import into this account</button></div>}</div></details>}
 
-      {screen === 'home' && <div>{timer.now !== null && <TodayActivityRing state={timer.state} initialNow={timer.now}/>}<div className="panel mt-6 p-5"><h2 className="text-lg font-semibold">Today at a glance</h2><p className="mt-3 text-sm text-slate-300">{active ? `Current activity: ${active.name}` : 'No activity is running'}</p><p className="mt-2 text-sm text-slate-400">{timer.now !== null ? `${formatCompletedDuration(buildDayTimeline(timer.state, timer.now).trackedMilliseconds)} tracked today` : 'Loading activity…'}</p><button type="button" onClick={() => setScreen('timer')} className="primary mt-4">{active ? 'Open timer' : 'Start activity'}</button></div></div>}
+      {screen === 'home' && (timer.now !== null ? <HomeDashboard state={timer.state} initialNow={timer.now} ready={timer.ready} onOpenTimer={() => setScreen('timer')} onOpenHistory={() => setScreen('history')} onOpenHabits={() => setScreen('habits')} onStartActivity={timer.start}/> : <div className="panel p-8 text-center text-sm text-slate-400">Loading today…</div>)}
 
       {screen === 'timer' && <section aria-labelledby="timer-title" className="panel relative mt-8 overflow-hidden"><div aria-hidden="true" className="pointer-events-none absolute -right-20 -top-28 size-80 rounded-full bg-teal-400/5 blur-3xl"/><div className="relative p-5 sm:p-8">
         <div className="flex items-center justify-between gap-4"><div><p className="eyebrow">LIVE SESSION</p><h2 id="timer-title" className="mt-2 text-xl font-semibold">Activity timer</h2></div><span className="rounded-full bg-white/5 px-3 py-1 text-xs text-slate-300">{!timer.ready ? 'Loading' : active ? running ? onBreak ? 'Legacy break' : active.name : 'Paused' : 'Ready'}</span></div>
