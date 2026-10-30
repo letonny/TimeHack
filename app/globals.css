@@ -1,5 +1,5 @@
 @import "tailwindcss";
-:root { color-scheme: dark; --background: #0b1424; --foreground: #edf3fa; }
+:root { color-scheme: dark; --background: #0a1020; --foreground: #e8efff; --surface: #16243a; --surface-border: #283e59; --muted: #94a9c4; --accent: #2dd4c6; --violet: #ac91fa; --gold: #ffd06d; }
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -15,9 +15,11 @@ button:disabled { cursor: not-allowed; opacity: .45; }
 :focus-visible { outline: 2px solid #5eead4; outline-offset: 4px; }
 ::selection { background: #5eead4; color: #0b1424; }
 @layer components {
-  .panel { @apply rounded-2xl border border-white/8 bg-[#111f33]; }
-  .primary { @apply rounded-xl bg-teal-300 px-5 py-3.5 text-sm font-semibold text-[#0b1424] hover:bg-teal-200; }
-  .eyebrow { @apply text-[10px] font-semibold tracking-[0.2em] text-teal-300 sm:text-xs; }
+  .panel, .th-card { background: var(--surface); border: 1px solid var(--surface-border); border-radius: 18px; }
+  .primary { @apply rounded-xl px-5 py-3.5 text-sm font-semibold; background: var(--accent); color: var(--background); }
+  .primary:hover { background: #66eadf; }
+  .eyebrow { @apply text-[10px] font-semibold tracking-[0.08em] sm:text-xs; color: var(--accent); }
+  .th-muted { color: var(--muted); }
 }
 
 progress { appearance: none; border: none; border-radius: 999px; overflow: hidden; background: #0b1424; }

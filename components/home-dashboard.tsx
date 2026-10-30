@@ -1,20 +1,26 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { activityForSession, iconGlyph, recentActivityNames } from '@/lib/activity-metadata';
-import { buildDayTimeline, formatDashboardDate, habitGoalProgress, localDayKey } from '@/lib/analytics';
+import { activityForName, iconGlyph, recentActivityNames } from '@/lib/activity-metadata';
+import { buildDayTimeline, habitGoalProgress, localDayKey } from '@/lib/analytics';
 import { firstNameFor, greetingFor } from '@/lib/personalization';
 import { createClient } from '@/lib/supabase/client';
 import { activeSet, duration, formatDuration, isRunning, setDuration, type Session, type TimerState } from '@/lib/timer';
 import { TodayActivityRing } from './today-activity-ring';
 
-function CurrentSession({ state, session, now, onOpenTimer }: { state: TimerState; session: Session | null; now: number; onOpenTimer: () => void }) {
-  const activity = session ? activityForSession(state, session) : null;
+function compactTime(milliseconds: number) {
+  const minutes = Math.floor(milliseconds / 60_000);
+  return minutes >= 60 ? `${Math.floor(minutes / 60)}h ${minutes % 60}m` : `${minutes}m`;
+}
+
+function CurrentSession({ session, now, onOpenTimer }: { session: Session | null; now: number; onOpenTimer: () => void }) {
   const currentSet = session ? activeSet(session) : null;
-  return <section aria-labelledby="current-session-title" className="rounded-[1.6rem] border border-white/10 bg-[#111f33] p-5 shadow-[0_24px_60px_rgba(0,0,0,.12)] sm:p-6">
-    <div className="flex items-start justify-between gap-3"><div><p className="eyebrow">RIGHT NOW</p><h2 id="current-session-title" className="mt-2 text-lg font-semibold text-white">Current session</h2></div><span className={`rounded-full px-2.5 py-1 text-[11px] font-medium ${session && isRunning(session) ? 'bg-teal-300/10 text-teal-200' : 'bg-white/5 text-slate-400'}`}>{session ? isRunning(session) ? '● Running' : 'Ⅱ Paused' : 'Ready'}</span></div>
-    {session ? <><div className="mt-5 flex items-center gap-3"><span aria-hidden="true" className="flex size-11 shrink-0 items-center justify-center rounded-xl text-lg text-slate-950" style={{ backgroundColor: activity!.color }}>{iconGlyph(activity!.icon)}</span><div className="min-w-0"><p className="truncate text-base font-medium text-white">{session.name}</p><p className="text-xs text-slate-400">Main activity</p></div></div><p className="mt-5 font-mono text-[clamp(2rem,8vw,3rem)] leading-none tracking-tight tabular-nums text-white" aria-label={`${session.name} elapsed ${formatDuration(duration(session, now))}`}>{formatDuration(duration(session, now))}</p>{currentSet && <div className="mt-5 flex items-center justify-between gap-3 rounded-xl border border-teal-300/15 bg-teal-300/5 p-3"><div className="min-w-0"><p className="truncate text-sm font-medium text-teal-200">SET · {currentSet.description}</p><p className="text-xs text-slate-400">Nested stopwatch</p></div><span className="shrink-0 font-mono text-sm tabular-nums text-white">{formatDuration(setDuration(currentSet, now))}</span></div>}</> : <p className="mt-5 text-sm leading-relaxed text-slate-400">Start an activity to see its live timer and any active SET here.</p>}
-    <button type="button" onClick={onOpenTimer} className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-teal-300 px-4 py-3 text-sm font-semibold text-slate-950 hover:bg-teal-200">{session ? 'Open timer' : 'Start an activity'} <span aria-hidden="true">↗</span></button>
+  return <section aria-labelledby="current-session-title" className="th-card p-5 sm:p-6">
+    <div className="flex items-center justify-between gap-3"><h2 id="current-session-title" className="text-[11px] font-semibold tracking-wide text-[#94a9c4]">CURRENT SESSION</h2><span className={`rounded-xl px-3 py-1 text-xs font-semibold ${session && isRunning(session) ? 'bg-[#174a48] text-[#2dd4c6]' : 'bg-[#293c55] text-[#94a9c4]'}`}>{session ? isRunning(session) ? '● LIVE' : 'PAUSED' : 'READY'}</span></div>
+    <p className="mt-2 truncate text-2xl font-semibold">{session?.name ?? 'Ready to start'}</p>
+    <p className="mt-2 text-3xl font-semibold tabular-nums">{session ? formatDuration(duration(session, now)) : '00:00:00'}</p>
+    {currentSet && <p className="mt-3 truncate text-xs text-[#2dd4c6]">SET · {currentSet.description} &nbsp; {formatDuration(setDuration(currentSet, now))}</p>}
+    <button type="button" onClick={onOpenTimer} className="mt-3 text-xs text-[#2dd4c6]">{session ? 'Open timer' : 'Start an activity'} →</button>
   </section>;
 }
 
@@ -45,7 +51,7 @@ export function HomeDashboard({ state, initialNow, ready, onOpenTimer, onOpenHis
     return () => { mounted = false; listener.subscription.unsubscribe(); };
   }, []);
 
-  const date = formatDashboardDate(now);
+  const shortDate = new Date(now).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' }).toUpperCase();
   const firstName = firstNameFor(state.profile.displayName, { givenName: accountFirstName });
   const timeline = buildDayTimeline(state, now, undefined, { includeBreaks: true });
   const dayKey = localDayKey(now);
@@ -55,30 +61,29 @@ export function HomeDashboard({ state, initialNow, ready, onOpenTimer, onOpenHis
   ]).size;
   const goalsCompleted = state.habits.filter(habit => habitGoalProgress(state, habit, now).percentage >= 100).length;
   const recent = recentActivityNames(state, 4);
+  const quickNames = [...new Set([...recent, ...state.activities.map(activity => activity.name)])].slice(0, 2);
   const startRecent = (name: string) => { if (onStartActivity(name)) onOpenTimer(); };
 
   return <div className="space-y-5 sm:space-y-6">
-    <section aria-labelledby="home-heading" className="relative overflow-hidden rounded-[1.7rem] border border-teal-300/10 bg-[radial-gradient(circle_at_50%_-30%,rgba(45,212,191,.16),transparent_65%),#111f33] px-4 py-6 text-center shadow-[0_24px_70px_rgba(0,0,0,.12)] sm:px-10 sm:py-10">
-      <p className="text-lg font-medium text-slate-100 sm:text-xl">{greetingFor(now)}{firstName && <>, <span className="text-teal-300">{firstName}</span></>}</p>
-      <p className="mt-4 text-[11px] font-bold tracking-[.26em] text-teal-300 uppercase sm:mt-5 sm:text-xs">{date.weekday}</p>
-      <h1 id="home-heading" className="mt-2 text-[clamp(2rem,7vw,3.7rem)] font-semibold leading-tight tracking-tight text-white">{date.date}</h1>
+    <section aria-labelledby="home-heading" className="py-1">
+      <p className="eyebrow">{shortDate}</p>
+      <h1 id="home-heading" className="mt-2 text-2xl font-semibold tracking-tight text-white sm:text-3xl">{greetingFor(now)}{firstName && <>, <span className="text-teal-300">{firstName}</span></>}</h1>
+      <p className="mt-1 text-sm text-[#94a9c4]">Your daily command center</p>
     </section>
 
     <section aria-label="Today metrics" className="grid grid-cols-3 gap-2 sm:gap-4">
-      <div className="min-w-0 rounded-2xl border border-white/10 bg-[#111f33] p-3 sm:p-5"><p className="text-[11px] leading-tight text-slate-400 sm:text-xs">Tracked today</p><p className="mt-2 whitespace-nowrap font-mono text-[clamp(.65rem,3vw,1.75rem)] font-semibold tabular-nums text-white">{formatDuration(timeline.trackedMilliseconds)}</p></div>
-      <div className="min-w-0 rounded-2xl border border-white/10 bg-[#111f33] p-3 sm:p-5"><p className="text-[11px] leading-tight text-slate-400 sm:text-xs">Sessions</p><p className="mt-2 text-xl font-semibold text-white sm:text-3xl">{sessionsToday}</p></div>
-      <button type="button" onClick={onOpenHabits} className="min-w-0 rounded-2xl border border-white/10 bg-[#111f33] p-3 text-left hover:border-teal-300/30 hover:bg-[#16283d] sm:p-5"><p className="text-[11px] leading-tight text-slate-400 sm:text-xs">{state.habits.length ? 'Goals completed' : 'Daily goals'}</p>{state.habits.length ? <p className="mt-2 text-xl font-semibold text-white sm:text-3xl">{goalsCompleted}<span className="ml-1 text-sm font-normal text-slate-500 sm:text-base">/ {state.habits.length}</span></p> : <p className="mt-2 text-[11px] font-medium leading-tight text-teal-200 sm:text-sm">Set a goal ↗</p>}</button>
+      <div className="th-card flex min-w-0 items-center gap-2 px-2 py-4 sm:gap-3 sm:px-4 sm:py-5"><span className="h-9 w-1 shrink-0 rounded-full bg-[#2dd4c6]"/><div className="min-w-0"><p className="truncate text-[clamp(.8rem,3.5vw,1.8rem)] font-semibold tabular-nums" title={formatDuration(timeline.trackedMilliseconds)}>{compactTime(timeline.trackedMilliseconds)}</p><p className="mt-1 text-[10px] text-[#94a9c4] sm:text-xs">Time tracked</p></div></div>
+      <div className="th-card flex min-w-0 items-center gap-2 px-2 py-4 sm:gap-3 sm:px-4 sm:py-5"><span className="h-9 w-1 shrink-0 rounded-full bg-[#ac91fa]"/><div><p className="text-[clamp(1.2rem,3.5vw,1.8rem)] font-semibold">{sessionsToday}</p><p className="mt-1 text-[10px] text-[#94a9c4] sm:text-xs">Sessions</p></div></div>
+      <button type="button" onClick={onOpenHabits} className="th-card flex min-w-0 items-center gap-2 px-2 py-4 text-left hover:border-[#ffd06d] sm:gap-3 sm:px-4 sm:py-5"><span className="h-9 w-1 shrink-0 rounded-full bg-[#ffd06d]"/><span className="min-w-0"><span className="block whitespace-nowrap text-[clamp(1rem,3.5vw,1.8rem)] font-semibold">{goalsCompleted} / {state.habits.length}</span><span className="mt-1 block text-[10px] text-[#94a9c4] sm:text-xs">Goals</span></span></button>
     </section>
 
-    <div className="grid gap-5 lg:grid-cols-[minmax(0,1.35fr)_minmax(300px,.8fr)] lg:items-start lg:gap-6">
+    <div className="grid min-w-0 gap-5 lg:grid-cols-[minmax(0,1.42fr)_minmax(0,1fr)] lg:items-stretch">
       <TodayActivityRing state={state} now={now}/>
-      <div className="space-y-5"><CurrentSession state={state} session={state.active} now={now} onOpenTimer={onOpenTimer}/>
-        <section aria-labelledby="quick-actions-title" className="rounded-[1.6rem] border border-white/10 bg-[#111f33] p-5 sm:p-6"><div className="flex items-center justify-between gap-3"><div><p className="eyebrow">COMMAND CENTER</p><h2 id="quick-actions-title" className="mt-2 text-lg font-semibold text-white">Quick actions</h2></div><span aria-hidden="true" className="text-xl text-teal-300">↗</span></div>
-          {recent.length > 0 && <><p className="mt-4 text-xs text-slate-400">{state.active ? 'Recent activities' : 'Start a recent activity'}</p><div className="mt-3 flex flex-wrap gap-2">{recent.map(name => state.active ? <span key={name} className="rounded-full border border-white/10 px-3.5 py-2 text-xs text-slate-300">{name}</span> : <button key={name} type="button" disabled={!ready} onClick={() => startRecent(name)} className="rounded-full border border-teal-300/20 bg-teal-300/5 px-3.5 py-2 text-xs font-medium text-teal-100 hover:bg-teal-300/15">{name}</button>)}</div></>}
-          {state.active && <p className="mt-4 text-sm text-slate-400">Your activity keeps running while you move between screens.</p>}
-          <div className="mt-5 grid grid-cols-2 gap-2"><button type="button" onClick={onOpenHistory} className="rounded-xl border border-white/10 px-3 py-3 text-sm text-slate-200 hover:bg-white/5">View history</button><button type="button" onClick={onOpenHabits} className="rounded-xl border border-white/10 px-3 py-3 text-sm text-slate-200 hover:bg-white/5">View habits</button></div>
-        </section>
+      <div className="min-w-0 space-y-5"><CurrentSession session={state.active} now={now} onOpenTimer={onOpenTimer}/>
+        <section aria-labelledby="quick-actions-title"><h2 id="quick-actions-title" className="mb-3 text-lg font-semibold">Quick start</h2><div className="grid grid-cols-3 gap-2">{quickNames.map(name => <button key={name} type="button" disabled={!ready || !!state.active} onClick={() => startRecent(name)} className="th-card min-w-0 px-3 py-4 text-left hover:border-[#2dd4c6]"><span aria-hidden="true" className="block text-xl text-[#2dd4c6]">{iconGlyph(activityForName(state, name).icon)}</span><span className="mt-3 block truncate text-xs font-semibold">{name}</span></button>)}<button type="button" onClick={onOpenTimer} className="th-card min-w-0 px-3 py-4 text-left hover:border-[#2dd4c6]"><span aria-hidden="true" className="block text-xl text-[#2dd4c6]">＋</span><span className="mt-3 block text-xs font-semibold">Custom</span></button></div></section>
+        <section aria-labelledby="habits-title" className="th-card hidden p-5 lg:block"><div className="flex items-center justify-between"><h2 id="habits-title" className="font-semibold">Today&apos;s habits</h2><button type="button" onClick={onOpenHabits} className="text-xs text-[#2dd4c6]">View all →</button></div>{state.habits.length ? <div className="mt-4 space-y-4">{state.habits.slice(0, 3).map(habit => { const progress = habitGoalProgress(state, habit, now); return <div key={habit.id}><div className="mb-2 flex justify-between gap-3 text-xs"><span className="truncate">{habit.name}</span><span className="shrink-0 text-[#94a9c4]">{Math.floor(progress.minutes)} / {habit.goalMinutes} min</span></div><div className="h-2 rounded-full bg-[#293c55]"><div className="h-full rounded-full bg-[#2dd4c6]" style={{ width: `${progress.visualPercentage}%` }}/></div></div>; })}</div> : <button type="button" onClick={onOpenHabits} className="mt-4 text-sm text-[#94a9c4]">Set your first habit goal →</button>}</section>
       </div>
     </div>
+    <section aria-labelledby="recent-title" className="th-card hidden px-5 py-4 lg:block"><div className="flex items-center justify-between gap-3"><h2 id="recent-title" className="font-semibold">Recent activity</h2><button type="button" onClick={onOpenHistory} className="text-xs text-[#2dd4c6]">View history →</button></div>{state.completed.length ? <ul className="mt-3 space-y-3">{state.completed.slice(0, 2).map(session => <li key={session.id} className="flex justify-between gap-4 text-sm"><span className="truncate">{session.name}</span><span className="shrink-0 text-xs text-[#94a9c4]">{session.startedAt === null ? 'Duration only' : new Date(session.startedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</span></li>)}</ul> : <p className="mt-3 text-sm text-[#94a9c4]">Your completed activities will appear here.</p>}</section>
   </div>;
 }

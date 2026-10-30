@@ -56,7 +56,7 @@ export function ReminderSettings({ habitId, reminder, ready, onSave, onDelete }:
       </button>
     </div>
 
-    {open && <form className="mt-4 rounded-xl border border-white/10 bg-[#0b1424] p-4" onSubmit={event => {
+    {open && <form className="mt-4 rounded-xl border border-white/10 bg-[var(--background)] p-4" onSubmit={event => {
       event.preventDefault();
       try {
         const value = validateReminder({ habitId, enabled, localTime, timeZone, weekdays, skipIfGoalComplete });
@@ -72,10 +72,10 @@ export function ReminderSettings({ habitId, reminder, ready, onSave, onDelete }:
 
       <div className="mt-4 grid gap-3 sm:grid-cols-2">
         <label className="text-xs text-slate-400">Local reminder time
-          <input required type="time" step="60" value={localTime} onChange={event => setLocalTime(event.target.value)} className="mt-1 w-full rounded-lg border border-white/10 bg-[#111f33] p-2.5 text-sm text-white"/>
+          <input required type="time" step="60" value={localTime} onChange={event => setLocalTime(event.target.value)} className="mt-1 w-full rounded-lg border border-white/10 bg-[var(--surface)] p-2.5 text-sm text-white"/>
         </label>
         <label className="text-xs text-slate-400">IANA time zone
-          <input required list={`reminder-zones-${habitId}`} value={timeZone} onChange={event => setTimeZone(event.target.value)} placeholder="America/Chicago" autoComplete="off" className="mt-1 w-full rounded-lg border border-white/10 bg-[#111f33] p-2.5 text-sm text-white"/>
+          <input required list={`reminder-zones-${habitId}`} value={timeZone} onChange={event => setTimeZone(event.target.value)} placeholder="America/Chicago" autoComplete="off" className="mt-1 w-full rounded-lg border border-white/10 bg-[var(--surface)] p-2.5 text-sm text-white"/>
           <datalist id={`reminder-zones-${habitId}`}>{zones.map(zone => <option key={zone} value={zone}/>)}</datalist>
         </label>
       </div>
