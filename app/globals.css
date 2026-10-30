@@ -31,9 +31,6 @@ progress::-moz-progress-bar { background: #5eead4; }
 .home-shell { position: relative; isolation: isolate; }
 .home-shell::before { content: ""; position: absolute; inset: -2rem -1rem auto; height: 24rem; z-index: -1; pointer-events: none; background: radial-gradient(ellipse at 72% 8%, rgba(23, 114, 189, .17), transparent 62%), radial-gradient(ellipse at 18% 18%, rgba(15, 197, 183, .1), transparent 55%); }
 .home-shell .th-card { border-color: rgba(80, 139, 185, .3); box-shadow: 0 12px 32px rgba(0, 0, 0, .13), inset 0 1px rgba(255, 255, 255, .035); }
-.home-shell [aria-label="Today metrics"] > :nth-child(1) { background: linear-gradient(140deg, #142b40, #142035); }
-.home-shell [aria-label="Today metrics"] > :nth-child(2) { background: linear-gradient(140deg, #252343, #172039); }
-.home-shell [aria-label="Today metrics"] > :nth-child(3) { background: linear-gradient(140deg, #3b2d30, #172039); }
 .home-shell .th-ring-card { background: radial-gradient(circle at 48% 46%, rgba(33, 141, 201, .16), transparent 39%), radial-gradient(circle at 80% 0%, rgba(22, 111, 178, .12), transparent 57%), linear-gradient(145deg, #10253a, #101a30 75%); border-color: rgba(54, 155, 206, .32); }
 .home-shell .th-session-card { background: radial-gradient(circle at 8% 0%, rgba(26, 174, 137, .18), transparent 52%), linear-gradient(145deg, #12322f, #11252e 58%, #151d32); border-color: rgba(45, 196, 157, .3); }
 .home-shell .th-live-status { box-shadow: 0 0 13px rgba(48, 220, 164, .22); }
@@ -42,3 +39,22 @@ progress::-moz-progress-bar { background: #5eead4; }
 .home-shell .th-activity-shortcut { background: radial-gradient(circle at 5% 0%, color-mix(in srgb, var(--shortcut-color) 22%, transparent), transparent 70%), linear-gradient(145deg, color-mix(in srgb, var(--shortcut-color) 15%, #172039), #142135); border-color: color-mix(in srgb, var(--shortcut-color) 40%, #263954); }
 .home-shell .th-habits-card { background: radial-gradient(circle at 95% 0%, rgba(236, 157, 97, .1), transparent 52%), linear-gradient(145deg, #282341, #172039 75%); border-color: rgba(156, 123, 218, .29); }
 .home-shell .th-recent-card { background: radial-gradient(circle at 0% 0%, rgba(73, 101, 196, .11), transparent 56%), linear-gradient(140deg, #18253e, #172039 74%); border-color: rgba(93, 120, 185, .29); }
+
+/* WHOOP-inspired Home treatment; intentionally scoped to the Home screen. */
+.home-mode { background: radial-gradient(ellipse at 80% 4%, rgba(65, 82, 90, .13), transparent 42%), #101313; }
+.home-mode > aside, .home-mode > nav, .home-mode > header { background: #171b1c; }
+.home-mode > aside { border-right: 1px solid #303637; }
+.home-mode .home-shell::before { background: radial-gradient(ellipse at 65% 0%, rgba(130, 171, 185, .08), transparent 60%); }
+.home-mode .home-shell .th-card { background: linear-gradient(145deg, #252a2c, #1b2022); border: 1px solid #343c3f; box-shadow: inset 0 1px rgba(255,255,255,.035), 0 12px 30px rgba(0,0,0,.14); }
+.home-mode .home-dial-row { background: linear-gradient(120deg, #202526, #292e30 50%, #202526); }
+.home-mode .home-shell .th-ring-card { background: radial-gradient(circle at 50% 51%, rgba(89, 133, 147, .13), transparent 47%), linear-gradient(145deg, #252a2c, #1a2022); }
+.home-mode .home-shell .th-session-card { background: radial-gradient(circle at 7% 0%, rgba(48, 138, 122, .12), transparent 52%), linear-gradient(145deg, #252b2b, #1a2021); border-color: #3a5150; }
+.home-mode .home-shell .th-habits-card { background: radial-gradient(circle at 100% 0%, rgba(117, 91, 148, .1), transparent 55%), linear-gradient(145deg, #282b2d, #1b2022); }
+.home-mode .home-shell .th-recent-card { background: linear-gradient(135deg, #25292c, #1a2022); }
+.home-mode .home-shell .th-quick-start { background: linear-gradient(145deg, #293c43, #202729); border-color: #385964; }
+.home-mode .home-shell .th-quick-log { background: linear-gradient(145deg, #32303e, #202427); border-color: #51495f; }
+.home-mode .home-shell .th-activity-shortcut { background: linear-gradient(145deg, color-mix(in srgb, var(--shortcut-color) 14%, #292f31), #202528); border-color: color-mix(in srgb, var(--shortcut-color) 35%, #3b4446); }
+.home-mode .home-dial-row { background: none; border: 0; box-shadow: none; }
+.home-mode .home-dial-row .home-summary-dial { height: 100%; background: radial-gradient(circle at 50% -25%, rgba(144, 185, 196, .13), transparent 67%), linear-gradient(145deg, #282e30, #1c2224); border: 1px solid #3a4447; box-shadow: inset 0 1px rgba(255,255,255,.055), 0 16px 38px rgba(0,0,0,.14); }
+.home-mode .home-dial-row > :nth-child(2) .home-summary-dial { background: radial-gradient(circle at 50% -25%, rgba(155, 156, 182, .13), transparent 67%), linear-gradient(145deg, #292d31, #1d2225); }
+.home-mode .home-dial-row > :nth-child(3) .home-summary-dial { background: radial-gradient(circle at 50% -25%, rgba(90, 184, 123, .14), transparent 67%), linear-gradient(145deg, #28312c, #1c2421); }

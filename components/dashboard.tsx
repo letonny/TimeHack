@@ -43,19 +43,19 @@ export function Dashboard() {
   const recentSession = recentSessionId ? timer.state.completed.find(session => session.id === recentSessionId) : null;
   const syncLabel = timer.syncing ? 'Syncing' : timer.pending ? `${timer.pending} pending` : timer.syncError ? 'Sync issue' : timer.ready ? 'Synced' : 'Loading';
 
-  return <div className="min-h-screen lg:pl-60">
+  return <div className={`min-h-screen lg:pl-60 ${screen === 'home' ? 'home-mode' : ''}`}>
     <aside className="fixed inset-y-0 left-0 hidden w-60 flex-col bg-[#0e192c] px-4 py-7 lg:flex">
       <Link href="/" className="flex items-center gap-3 px-3 text-2xl font-bold tracking-tight text-[#2dd4c6]"><span aria-hidden="true" className="text-2xl">◉</span>TimeHack<span className="sr-only"> home</span></Link>
       <p className="mt-12 px-3 text-[10px] font-semibold tracking-[.2em] text-slate-500 uppercase">Workspace</p>
       <nav aria-label="Main navigation" className="mt-3 space-y-1">{navigationItems.map(item => <button key={item} type="button" aria-current={screen === item ? 'page' : undefined} onClick={() => setScreen(item)} className={`flex w-full items-center gap-6 rounded-xl px-4 py-3 text-left text-sm font-medium capitalize ${screen === item ? 'bg-[#20334e] text-white' : 'text-[#94a9c4] hover:bg-[#20334e] hover:text-white'}`}><span aria-hidden="true" className="w-5 text-xl text-[#2dd4c6]">{navigationIcons[item]}</span>{item}</button>)}</nav>
       <div className="mt-auto border-t border-white/8 px-3 pt-5"><div role="status" className="flex items-center gap-2 text-xs text-slate-400" title={timer.syncError || 'Account synchronization status'}><span className={`size-2 rounded-full ${timer.syncError ? 'bg-amber-300' : timer.syncing || timer.pending ? 'bg-sky-300' : timer.ready ? 'bg-teal-300' : 'bg-slate-500'}`}/>{syncLabel}</div><form action={logout} className="mt-5" onSubmit={() => { navigator.serviceWorker?.controller?.postMessage({ type: 'timehack-account', userId: '' }); }}><SignOutButton/></form></div>
     </aside>
-    <header className={`${screen === 'home' ? 'hidden' : 'border-b border-white/8'} lg:hidden`}><div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-5 py-4 sm:px-8">
+    <header className="border-b border-white/8 lg:hidden"><div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-5 py-4 sm:px-8">
       <Link href="/" className="flex items-center gap-3 text-xl font-bold tracking-tight"><span aria-hidden="true" className="flex size-9 items-center justify-center rounded-xl bg-teal-300 text-lg text-[#0b1424]">↗</span>TimeHack<span className="sr-only"> home</span></Link>
       <div className="flex items-center gap-3"><div role="status" className="flex items-center gap-2 text-[11px] text-slate-400" title={timer.syncError || 'Account synchronization status'}><span className={`size-1.5 rounded-full ${timer.syncError ? 'bg-amber-300' : timer.syncing || timer.pending ? 'bg-sky-300' : timer.ready ? 'bg-teal-300' : 'bg-slate-500'}`}/><span className="hidden sm:inline">{syncLabel}</span></div><form action={logout} onSubmit={() => { navigator.serviceWorker?.controller?.postMessage({ type: 'timehack-account', userId: '' }); }}><SignOutButton/></form></div>
     </div></header>
 
-    <main className="mx-auto max-w-6xl px-4 py-7 pb-28 sm:px-8 sm:py-9 sm:pb-12 lg:px-10">
+    <main className={`mx-auto px-4 py-7 pb-28 sm:px-8 sm:py-9 sm:pb-12 lg:px-10 ${screen === 'home' ? 'w-full max-w-[1480px]' : 'max-w-6xl'}`}>
       {screen !== 'home' && <div className="mb-6 text-center" aria-live="polite">{date ? <><p className="text-lg text-slate-300 sm:text-xl">{screen[0].toUpperCase() + screen.slice(1)}</p><p className="mt-3 text-xs font-semibold tracking-[.22em] text-teal-300">{date.weekday}</p><h1 className="mt-1 text-2xl font-semibold tracking-tight text-white sm:text-3xl">{date.date}</h1></> : <h1 className="text-xl text-slate-400">Loading today…</h1>}</div>}
 
       {timer.error && <p role="alert" className="mb-5 rounded-xl border border-amber-300/30 bg-amber-300/10 p-4 text-sm text-amber-100">{timer.error}</p>}
