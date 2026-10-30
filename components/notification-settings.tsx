@@ -112,15 +112,15 @@ export function NotificationSettings() {
     finally { setBusy(false); }
   }
 
-  return <section className="panel mb-5 p-5" aria-labelledby="push-title">
-    <h2 id="push-title" className="text-lg font-medium">Device notifications</h2>
+  return <section className="panel p-5 sm:p-6" aria-labelledby="push-title">
+    <p className="eyebrow">REMINDERS</p><h2 id="push-title" className="mt-1 text-xl font-bold sm:text-2xl">Device notifications</h2>
     <p className="mt-1 text-sm text-slate-400">Reminder schedules are saved with your account. Push delivery also needs permission on each device.</p>
     <p className="mt-2 text-xs text-slate-300">Status: {!supported ? 'Unsupported in this browser' : permission === 'denied' ? 'Blocked by browser settings' : subscribed ? 'Enabled on this device' : permission === 'granted' ? 'Permission granted; device not subscribed' : 'Permission not requested'}</p>
     {!supported && <p className="mt-2 text-xs text-amber-200">Web Push is unavailable in this browser or installation.</p>}
     <p className="mt-2 text-xs text-slate-400">iPhone/iPad: on iOS/iPadOS 16.4 or later, open TimeHack in Safari, tap Share → Add to Home Screen, open the installed app, then enable notifications there.</p>
     <div className="mt-3 flex flex-wrap gap-2">
-      {supported && !subscribed && <button type="button" disabled={busy || !publicKey || permission === 'denied'} onClick={enable} className="rounded-lg bg-teal-300 px-3 py-2 text-xs font-medium text-slate-950 disabled:opacity-50">Enable notifications</button>}
-      {subscribed && <><button type="button" disabled={busy} onClick={disable} className="rounded-lg border border-white/15 px-3 py-2 text-xs disabled:opacity-50">Disable notifications</button><button type="button" disabled={busy} onClick={testPush} className="rounded-lg border border-white/15 px-3 py-2 text-xs disabled:opacity-50">Send test notification</button></>}
+      {supported && !subscribed && <button type="button" disabled={busy || !publicKey || permission === 'denied'} onClick={enable} className="rounded-xl bg-[#35c9f4] px-4 py-3 text-sm font-bold text-[#0d1117] disabled:opacity-50">Enable notifications</button>}
+      {subscribed && <><button type="button" disabled={busy} onClick={disable} className="rounded-xl border border-white/15 px-4 py-3 text-sm disabled:opacity-50">Disable notifications</button><button type="button" disabled={busy} onClick={testPush} className="rounded-xl border border-cyan-300/25 bg-cyan-300/5 px-4 py-3 text-sm text-cyan-100 disabled:opacity-50">Send test notification</button></>}
     </div>
     {!publicKey && <p className="mt-2 text-xs text-amber-200">Push delivery is awaiting environment configuration.</p>}
     {message && <p role="status" className="mt-2 text-xs text-amber-100">{message}</p>}

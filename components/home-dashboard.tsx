@@ -1,27 +1,35 @@
 'use client';
 
-import { useEffect, useState, type CSSProperties } from 'react';
-import { activityForName, iconGlyph, recentActivityNames } from '@/lib/activity-metadata';
-import { buildDayTimeline, habitGoalProgress, localDayKey } from '@/lib/analytics';
+import { useEffect, useMemo, useState, type CSSProperties } from 'react';
+import { activityForName, activityForSession, iconGlyph, recentActivityNames } from '@/lib/activity-metadata';
+import { activityNames, addLocalDays, buildDayTimeline, localDayKey, localDayStart } from '@/lib/analytics';
 import { firstNameFor, greetingFor } from '@/lib/personalization';
+import { dayActivityBuckets, habitPeriodProgress, periodDayKeys, periodSummary, productiveTrend, shiftPeriod, type AnalyticsPeriod } from '@/lib/productivity-analytics';
 import { createClient } from '@/lib/supabase/client';
-import { activeSet, duration, formatDuration, isRunning, setDuration, type Session, type TimerState } from '@/lib/timer';
+import { activeSet, duration, formatDuration, isDurationOnly, isRunning, setDuration, type Session, type TimerState } from '@/lib/timer';
+import { ActivityOverDayChart, AnalyticsMetric, ProductivityTrendChart } from './home-analytics';
 import { TodayActivityRing } from './today-activity-ring';
-import { HomeSummaryDial } from './home-summary-dial';
 
 function compactTime(milliseconds: number) {
-  const minutes = Math.floor(milliseconds / 60_000);
-  return minutes >= 60 ? `${Math.floor(minutes / 60)}h ${minutes % 60}m` : `${minutes}m`;
+  const totalMinutes = Math.floor(Math.max(0, milliseconds) / 60_000);
+  return totalMinutes >= 60 ? `${Math.floor(totalMinutes / 60)}h ${String(totalMinutes % 60).padStart(2, '0')}m` : `${totalMinutes}m`;
 }
 
-function CurrentSession({ session, now, ready, onOpenTimer, onPause, onResume, onFinish, onNextSet, onEndSet }: { session: Session | null; now: number; ready: boolean; onOpenTimer: () => void; onPause: () => boolean; onResume: () => boolean; onFinish: () => boolean; onNextSet: () => boolean; onEndSet: () => boolean }) {
+function CurrentSession({ session, now, ready, onOpenTimer, onPause, onResume, onFinish, onNextSet, onEndSet }: {
+  session: Session | null; now: number; ready: boolean; onOpenTimer: () => void;
+  onPause: () => boolean; onResume: () => boolean; onFinish: () => boolean; onNextSet: () => boolean; onEndSet: () => boolean;
+}) {
   const currentSet = session ? activeSet(session) : null;
-  return <section aria-labelledby="current-session-title" className="th-card th-session-card overflow-hidden p-5 sm:p-7 lg:p-8">
-    <div className="flex items-center justify-between gap-3"><h2 id="current-session-title" className="text-sm font-bold tracking-[.12em] text-[#bdced0]">CURRENT SESSION</h2><span className={`rounded-full px-4 py-2 text-xs font-bold tracking-wide ${session && isRunning(session) ? 'th-live-status bg-[#194b39] text-[#75ed9b]' : 'bg-[#303a3d] text-[#c3d0d0]'}`}>{session ? isRunning(session) ? '● LIVE' : 'PAUSED' : 'READY'}</span></div>
-    <p className="mt-5 truncate text-2xl font-semibold xl:text-3xl">{session?.name ?? 'Ready to start'}</p>
-    {!session && <p className="mt-2 text-sm text-[#a3b5b8]">Choose an activity and make today count.</p>}
-    <p className="mt-5 text-center text-[clamp(2.5rem,5vw,4.7rem)] font-bold leading-none tracking-tight tabular-nums">{session ? formatDuration(duration(session, now)) : '00:00:00'}</p>
-    {session ? <><div className="mt-6 grid grid-cols-2 gap-3"><button type="button" disabled={!ready} onClick={isRunning(session) ? onPause : onResume} className="rounded-2xl border border-white/15 bg-white/8 px-3 py-4 text-base font-semibold">{isRunning(session) ? 'Ⅱ Pause' : '▶ Resume'}</button><button type="button" disabled={!ready} onClick={onFinish} className="rounded-2xl bg-[#e4555b] px-3 py-4 text-base font-bold text-white">■ Finish</button></div><div className="mt-6 rounded-2xl border border-white/10 bg-black/15 p-4"><div className="flex items-center justify-between gap-3"><div className="min-w-0"><p className="text-xs font-bold tracking-wide text-[#a8b9bb]">CURRENT SET</p><p className="mt-1 truncate text-base font-semibold">{currentSet ? currentSet.description : 'No SET running'}</p></div><span className="font-mono text-lg font-semibold text-[#8dd2de] tabular-nums">{currentSet ? formatDuration(setDuration(currentSet, now)) : '00:00'}</span></div><div className="mt-3 flex items-center gap-3"><button type="button" disabled={!ready || !isRunning(session)} onClick={onNextSet} className="rounded-xl bg-[#27535a] px-4 py-3 text-sm font-bold text-[#d4f5f5]">{currentSet ? 'Next SET' : 'Start SET'}</button>{currentSet && <button type="button" disabled={!ready} onClick={onEndSet} className="rounded-xl border border-white/15 px-4 py-3 text-sm text-slate-200">End SET</button>}<button type="button" onClick={onOpenTimer} className="ml-auto text-sm text-[#91cfda]">Details →</button></div></div></> : <button type="button" onClick={onOpenTimer} className="mt-6 w-full rounded-2xl bg-[#82c9d3] px-4 py-4 text-base font-bold text-[#102026]">Start Timer →</button>}
+  return <section aria-labelledby="current-session-title" className={`th-card th-session-card analytics-session min-w-0 overflow-hidden p-5 sm:p-6 ${session && isRunning(session) ? 'analytics-session--live' : ''}`}>
+    <div className="flex items-center justify-between gap-3"><p className="analytics-eyebrow">CURRENT SESSION</p><span className={`rounded-full px-3 py-1 text-[11px] font-bold tracking-wide ${session && isRunning(session) ? 'th-live-status bg-[#194b39] text-[#75ed9b]' : 'bg-[#303a3d] text-[#c3d0d0]'}`}>{session ? isRunning(session) ? '● LIVE' : 'PAUSED' : 'READY'}</span></div>
+    <h2 id="current-session-title" className="mt-4 truncate text-xl font-bold sm:text-2xl">{session?.name ?? 'Ready to start'}</h2>
+    {!session && <p className="mt-1 text-sm text-[#9ba8b8]">Choose an activity to start tracking.</p>}
+    <p className="mt-4 text-center text-[clamp(2.2rem,4vw,3.7rem)] font-bold leading-none tracking-tight tabular-nums">{session ? formatDuration(duration(session, now)) : '00:00:00'}</p>
+    <p className="mt-2 text-center text-xs text-[#9ba8b8]">Productive time · breaks and pauses excluded</p>
+    {session ? <><div className="mt-5 grid grid-cols-2 gap-2"><button type="button" disabled={!ready} onClick={isRunning(session) ? onPause : onResume} className="rounded-xl border border-white/15 bg-white/8 px-3 py-3 text-sm font-semibold">{isRunning(session) ? 'Ⅱ Pause' : '▶ Resume'}</button><button type="button" disabled={!ready} onClick={onFinish} className="rounded-xl bg-[#d85b67] px-3 py-3 text-sm font-bold text-white">■ Finish</button></div>
+      <div className="mt-4 rounded-xl border border-white/10 bg-black/15 p-3"><div className="flex items-center justify-between gap-3"><div className="min-w-0"><p className="text-[10px] font-bold tracking-wide text-[#9ba8b8]">CURRENT SET</p><p className="mt-1 truncate text-sm font-semibold">{currentSet ? currentSet.description : 'No SET running'}</p></div><span className="shrink-0 font-mono text-base font-semibold text-[#8dd2de] tabular-nums">{currentSet ? formatDuration(setDuration(currentSet, now)) : '00:00'}</span></div>
+        <div className="mt-3 flex flex-wrap items-center gap-2"><button type="button" disabled={!ready || !isRunning(session)} onClick={onNextSet} className="rounded-lg bg-[#27535a] px-3 py-2 text-xs font-bold text-[#d4f5f5]">{currentSet ? 'Next SET' : 'Start SET'}</button>{currentSet && <button type="button" disabled={!ready} onClick={onEndSet} className="rounded-lg border border-white/15 px-3 py-2 text-xs text-slate-200">End SET</button>}<button type="button" onClick={onOpenTimer} className="ml-auto rounded-lg px-2 py-2 text-xs text-[#91cfda]">Details →</button></div></div>
+    </> : <button type="button" onClick={onOpenTimer} className="mt-5 w-full rounded-xl bg-[#35c9f4] px-4 py-3 text-sm font-bold text-[#0d1117]">Start Timer →</button>}
   </section>;
 }
 
@@ -33,6 +41,9 @@ export function HomeDashboard({ state, initialNow, ready, onOpenTimer, onOpenHis
 }) {
   const [now, setNow] = useState(initialNow);
   const [accountFirstName, setAccountFirstName] = useState<string | null>(null);
+  const [period, setPeriod] = useState<AnalyticsPeriod>('day');
+  const [anchorKey, setAnchorKey] = useState(localDayKey(initialNow));
+  const [selectedActivity, setSelectedActivity] = useState('');
   useEffect(() => {
     const tick = window.setInterval(() => setNow(Date.now()), 1000);
     const visible = () => { if (!document.hidden) setNow(Date.now()); };
@@ -44,48 +55,60 @@ export function HomeDashboard({ state, initialNow, ready, onOpenTimer, onOpenHis
     const client = createClient();
     const nameForUser = (user: { email?: string | null; user_metadata?: Record<string, unknown> } | null) => user
       ? firstNameFor('', { givenName: user.user_metadata?.given_name, fullName: user.user_metadata?.full_name ?? user.user_metadata?.name, email: user.email }) : null;
-    void client.auth.getUser().then(({ data }) => { if (mounted) setAccountFirstName(nameForUser(data.user)); }).catch(() => {
-      if (mounted) setAccountFirstName(null);
-    });
-    const { data: listener } = client.auth.onAuthStateChange((_event, session) => {
-      if (mounted) setAccountFirstName(nameForUser(session?.user ?? null));
-    });
+    void client.auth.getUser().then(({ data }) => { if (mounted) setAccountFirstName(nameForUser(data.user)); }).catch(() => { if (mounted) setAccountFirstName(null); });
+    const { data: listener } = client.auth.onAuthStateChange((_event, session) => { if (mounted) setAccountFirstName(nameForUser(session?.user ?? null)); });
     return () => { mounted = false; listener.subscription.unsubscribe(); };
   }, []);
 
-  const shortDate = new Date(now).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' }).toUpperCase();
+  const todayKey = localDayKey(now);
+  const analyticsNow = Math.floor(now / 60_000) * 60_000;
+  const availableActivities = activityNames(state);
+  const chartActivity = availableActivities.includes(selectedActivity) ? selectedActivity : '';
+  const analytics = useMemo(() => {
+    const keys = periodDayKeys(anchorKey, period);
+    const summary = periodSummary(state, analyticsNow, keys);
+    const prior = periodSummary(state, analyticsNow, periodDayKeys(shiftPeriod(anchorKey, period, -1), period));
+    const trendKeys = period === 'day' ? Array.from({ length: 7 }, (_, index) => addLocalDays(anchorKey, index - 6)) : keys;
+    return {
+      keys, summary, prior, trend: productiveTrend(state, analyticsNow, trendKeys),
+      buckets: dayActivityBuckets(state, analyticsNow, anchorKey, chartActivity),
+      day: buildDayTimeline(state, analyticsNow, anchorKey, { activity: chartActivity, includeBreaks: true }),
+      goalProgress: habitPeriodProgress(state, analyticsNow, keys),
+      todayGoals: habitPeriodProgress(state, analyticsNow, [localDayKey(analyticsNow)]),
+    };
+  }, [state, analyticsNow, anchorKey, period, chartActivity]);
   const firstName = firstNameFor(state.profile.displayName, { givenName: accountFirstName });
-  const timeline = buildDayTimeline(state, now, undefined, { includeBreaks: true });
-  const dayKey = localDayKey(now);
-  const sessionsToday = new Set([
-    ...timeline.slices.flatMap(slice => slice.sessionId ? [slice.sessionId] : []),
-    ...state.completed.filter(session => session.entryType === 'manual_duration' && session.localDate === dayKey).map(session => session.id),
-  ]).size;
-  const goalsCompleted = state.habits.filter(habit => habitGoalProgress(state, habit, now).percentage >= 100).length;
+  const shortDate = new Date(now).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' }).toUpperCase();
+  const firstKey = analytics.keys[0];
+  const lastKey = analytics.keys.at(-1)!;
+  const periodLabel = period === 'month' ? new Date(localDayStart(firstKey)).toLocaleDateString([], { month: 'long', year: 'numeric' })
+    : period === 'week' ? `${new Date(localDayStart(firstKey)).toLocaleDateString([], { month: 'short', day: 'numeric' })} – ${new Date(localDayStart(lastKey)).toLocaleDateString([], { month: 'short', day: 'numeric' })}`
+      : new Date(localDayStart(anchorKey)).toLocaleDateString([], { weekday: 'long', month: 'short', day: 'numeric' });
+  const nextKey = shiftPeriod(anchorKey, period, 1);
+  const canGoNext = periodDayKeys(nextKey, period)[0] <= todayKey;
+  const comparison = analytics.prior.productiveMilliseconds > 0 ? `${analytics.summary.productiveMilliseconds >= analytics.prior.productiveMilliseconds ? '+' : '−'}${compactTime(Math.abs(analytics.summary.productiveMilliseconds - analytics.prior.productiveMilliseconds))} vs previous ${period}` : null;
   const recent = recentActivityNames(state, 4);
-  const quickNames = [...new Set([...recent, ...state.activities.map(activity => activity.name)])].slice(0, 2);
+  const quickName = [...new Set([...recent, ...state.activities.map(activity => activity.name)])][0];
   const startRecent = (name: string) => { if (onStartActivity(name)) onOpenTimer(); };
 
-  return <div className="home-shell min-w-0 space-y-7 lg:space-y-8">
-    <section aria-labelledby="home-heading" className="py-1">
-      <p className="eyebrow">{shortDate}</p>
-      <h1 id="home-heading" className="mt-3 text-[clamp(2.1rem,4vw,3.5rem)] font-bold leading-tight tracking-tight text-white">{greetingFor(now)}{firstName && <>, <span className="text-cyan-300">{firstName}</span></>}</h1>
-      <p className="mt-2 text-base text-[#aab8bc]">Your day in motion</p>
-    </section>
+  return <div className="home-shell analytics-home min-w-0 space-y-5 sm:space-y-6">
+    <header className="flex flex-wrap items-end justify-between gap-4"><div><p className="analytics-eyebrow">{shortDate}</p><h1 className="mt-2 text-[clamp(2rem,3vw,3rem)] font-bold leading-tight tracking-tight">{greetingFor(now)}{firstName && <>, <span className="text-[#35c9f4]">{firstName}</span></>}</h1><p className="mt-1 text-sm text-[#9ba8b8]">Understand where your time goes.</p></div>
+      <div className="flex flex-col items-start gap-2 sm:items-end"><div role="group" aria-label="Analytics period" className="flex rounded-xl border border-white/10 bg-[#1b222b] p-1">{(['day', 'week', 'month'] as const).map(value => <button key={value} type="button" aria-pressed={period === value} onClick={() => setPeriod(value)} className={`rounded-lg px-3 py-2 text-xs font-semibold capitalize sm:px-4 ${period === value ? 'bg-[#35434e] text-white' : 'text-[#9ba8b8] hover:text-white'}`}>{value}</button>)}</div><div className="flex items-center gap-2 text-xs text-[#b7c5d1]"><button type="button" onClick={() => setAnchorKey(shiftPeriod(anchorKey, period, -1))} className="rounded-lg border border-white/10 px-2 py-1.5" aria-label={`Previous ${period}`}>←</button><span className="min-w-32 text-center">{periodLabel}</span><button type="button" disabled={!canGoNext} onClick={() => setAnchorKey(nextKey)} className="rounded-lg border border-white/10 px-2 py-1.5" aria-label={`Next ${period}`}>→</button>{anchorKey !== todayKey && <button type="button" onClick={() => setAnchorKey(todayKey)} className="rounded-lg border border-white/10 px-2 py-1.5 text-[#8ce4ef]">Today</button>}</div></div>
+    </header>
 
-    <section aria-label="Today metrics" className="home-dial-row grid grid-cols-3 gap-3 sm:gap-5">
-      <HomeSummaryDial label="Tracked" value={compactTime(timeline.trackedMilliseconds)} progress={timeline.trackedMilliseconds / timeline.dayMilliseconds} color="#85b9d5" caption="Today"/>
-      <HomeSummaryDial label="Sessions" value={String(sessionsToday)} color="#c4cbd0" caption="Today"/>
-      <button type="button" onClick={onOpenHabits} className="min-w-0 rounded-[1.6rem] text-left"><HomeSummaryDial label="Goals" value={`${goalsCompleted}/${state.habits.length}`} progress={state.habits.length ? goalsCompleted / state.habits.length : 0} color="#52e776" caption="Completed today"/></button>
-    </section>
+    <section aria-label="Period metrics" className="grid grid-cols-2 gap-3 lg:grid-cols-4"><AnalyticsMetric label="Tracked time" value={compactTime(analytics.summary.trackedMilliseconds)} note="Includes recorded breaks" tone="cyan"/><AnalyticsMetric label="Productive time" value={compactTime(analytics.summary.productiveMilliseconds)} note="Breaks and pauses excluded" tone="emerald"/><AnalyticsMetric label="Sessions" value={String(analytics.summary.sessionCount)} note="Completed in period" tone="violet"/><AnalyticsMetric label="Goals met" value={String(analytics.summary.goalsCompleted)} note={state.habits.length ? 'Configured daily habits' : 'No goals configured'} tone="amber"/></section>
 
-    <div className="grid min-w-0 gap-5 lg:grid-cols-2 lg:items-start xl:grid-cols-[minmax(0,1.16fr)_minmax(0,1fr)] xl:gap-7">
-      <TodayActivityRing state={state} now={now} onOpenTimer={onOpenTimer}/>
-      <div className="min-w-0 space-y-5 lg:space-y-7"><CurrentSession session={state.active} now={now} ready={ready} onOpenTimer={onOpenTimer} onPause={onPause} onResume={onResume} onFinish={onFinish} onNextSet={onNextSet} onEndSet={onEndSet}/>
-        <section aria-labelledby="quick-actions-title"><h2 id="quick-actions-title" className="mb-4 text-xl font-bold sm:text-2xl">Quick actions</h2><div className="grid grid-cols-3 gap-2"><button type="button" onClick={onOpenTimer} className="th-card th-quick-start min-w-0 px-4 py-5 text-left hover:border-cyan-400"><span aria-hidden="true" className="block text-2xl text-cyan-300">▶</span><span className="mt-4 block text-sm font-semibold">{state.active ? 'Open Timer' : 'Start Timer'}</span></button><button type="button" disabled={!!state.active} onClick={onOpenTimer} title={state.active ? "Finish the current session to log time manually" : "Open manual time logging"} className="th-card th-quick-log min-w-0 px-4 py-5 text-left hover:border-violet-400"><span aria-hidden="true" className="block text-2xl text-violet-300">＋</span><span className="mt-4 block text-sm font-semibold">Log Time</span></button>{quickNames.length ? <button type="button" disabled={!ready || !!state.active} onClick={() => startRecent(quickNames[0])} style={{ '--shortcut-color': activityForName(state, quickNames[0]).color } as CSSProperties} className="th-card th-activity-shortcut min-w-0 px-4 py-5 text-left hover:border-green-400"><span aria-hidden="true" className="block text-2xl text-green-300">{iconGlyph(activityForName(state, quickNames[0]).icon)}</span><span className="mt-4 block truncate text-sm font-semibold">{quickNames[0]}</span></button> : <button type="button" onClick={onOpenHistory} className="th-card min-w-0 px-4 py-5 text-left"><span aria-hidden="true" className="block text-2xl text-amber-300">◷</span><span className="mt-4 block text-sm font-semibold">History</span></button>}</div></section>
-        <section aria-labelledby="habits-title" className="th-card th-habits-card p-5 sm:p-7"><div className="flex items-center justify-between"><h2 id="habits-title" className="text-xl font-bold">Today&apos;s habits</h2><button type="button" onClick={onOpenHabits} className="text-xs text-cyan-300">View all →</button></div>{state.habits.length ? <div className="mt-4 space-y-4">{state.habits.slice(0, 3).map((habit, index) => { const progress = habitGoalProgress(state, habit, now); const colors = ['#24c4ff', '#6df879', '#ae6aff']; return <div key={habit.id}><div className="mb-2 flex justify-between gap-3 text-xs"><span className="truncate">{habit.name}</span><span className="shrink-0 text-[#94a9c4]">{Math.floor(progress.minutes)} / {habit.goalMinutes} min</span></div><div className="h-2 rounded-full bg-[#293c55]"><div className="h-full rounded-full" style={{ width: `${progress.visualPercentage}%`, backgroundColor: colors[index] }}/></div></div>; })}</div> : <button type="button" onClick={onOpenHabits} className="mt-4 text-sm text-[#94a9c4]">Set your first habit goal →</button>}</section>
-      </div>
+    <section aria-label="Quick actions" className="grid grid-cols-2 gap-2 text-xs sm:flex sm:flex-wrap"><button type="button" onClick={onOpenTimer} className="analytics-action analytics-action--cyan">▶ {state.active ? 'Open Timer' : 'Start Timer'}</button><button type="button" disabled={!!state.active} onClick={onOpenTimer} className="analytics-action analytics-action--violet">＋ Log Time</button>{quickName && <button type="button" disabled={!ready || !!state.active} onClick={() => startRecent(quickName)} style={{ '--shortcut-color': activityForName(state, quickName).color } as CSSProperties} className="analytics-action analytics-action--activity">↗ {quickName}</button>}<button type="button" onClick={onOpenHistory} className="analytics-action">History →</button></section>
+
+    <div className="analytics-layout min-w-0">
+      <CurrentSession session={state.active} now={now} ready={ready} onOpenTimer={onOpenTimer} onPause={onPause} onResume={onResume} onFinish={onFinish} onNextSet={onNextSet} onEndSet={onEndSet}/>
+      <ActivityOverDayChart buckets={analytics.buckets} selectedActivity={chartActivity} activityNames={availableActivities} onSelectActivity={setSelectedActivity} dayLabel={new Date(localDayStart(anchorKey)).toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' })} untimedMilliseconds={analytics.day.unscheduledMilliseconds}/>
+      <TodayActivityRing state={state} now={now} dayKey={anchorKey} onOpenTimer={onOpenTimer}/>
+      <ProductivityTrendChart points={analytics.trend} label={period === 'day' ? 'Past 7 days' : periodLabel} comparison={comparison}/>
+      <section aria-labelledby="goals-title" className="th-card analytics-card min-w-0 p-5 sm:p-6"><div className="flex items-center justify-between gap-3"><div><p className="analytics-eyebrow">DAILY HABITS</p><h2 id="goals-title" className="mt-1 text-xl font-bold sm:text-2xl">Goal progress</h2></div><button type="button" onClick={onOpenHabits} className="text-xs font-semibold text-[#35c9f4]">View habits →</button></div>
+        {analytics.goalProgress.length ? <><p className="mt-2 text-xs text-[#9ba8b8]">{period === 'day' ? 'Selected day' : `Current daily targets across elapsed days in this ${period}`}</p><ul className="mt-5 space-y-4">{analytics.goalProgress.slice(0, 4).map(progress => { const today = analytics.todayGoals.find(item => item.habit.id === progress.habit.id); const color = activityForName(state, progress.habit.name).color; return <li key={progress.habit.id} className="min-w-0"><div className="flex items-center justify-between gap-2 text-sm"><span className="min-w-0 truncate font-semibold"><span className="mr-2 inline-block size-2 rounded-full" style={{ backgroundColor: color }}/>{progress.habit.name}</span><span className="shrink-0 tabular-nums text-[#b7c5d1]">{compactTime(progress.minutes * 60_000)} / {compactTime(progress.targetMinutes * 60_000)}</span></div><div className="mt-2 h-2 overflow-hidden rounded-full bg-[#34404a]"><div className="h-full rounded-full" style={{ width: `${progress.percentage}%`, backgroundColor: color }}/></div><p className="mt-1 text-[11px] text-[#9ba8b8]">{progress.completedDays}/{progress.eligibleDays} daily goals met · {progress.remainingMinutes > 0 ? `${compactTime(progress.remainingMinutes * 60_000)} to combined target` : 'Combined time target reached'}</p><p className="mt-1 text-[11px] text-[#9ba8b8]">Today: {compactTime((today?.minutes ?? 0) * 60_000)} / {compactTime(progress.habit.goalMinutes * 60_000)}</p></li>; })}</ul>{analytics.goalProgress.length > 4 && <button type="button" onClick={onOpenHabits} className="mt-4 text-xs text-[#35c9f4]">See all {analytics.goalProgress.length} habits →</button>}</> : <div className="mt-5 rounded-xl border border-dashed border-white/10 bg-white/[.025] p-5"><p className="font-medium">Give an activity a daily goal</p><p className="mt-2 text-sm text-[#9ba8b8]">Time-based habits show real progress here, without a default target.</p><button type="button" onClick={onOpenHabits} className="mt-4 rounded-lg bg-[#293e48] px-4 py-2 text-xs font-bold text-[#86dff6]">Create a habit →</button></div>}
+      </section>
+      <section aria-labelledby="recent-title" className="th-card analytics-card min-w-0 p-5 sm:p-6"><div className="flex items-center justify-between gap-3"><div><p className="analytics-eyebrow">YOUR RECORD</p><h2 id="recent-title" className="mt-1 text-xl font-bold sm:text-2xl">Recent activity</h2></div><button type="button" onClick={onOpenHistory} className="text-xs font-semibold text-[#35c9f4]">View history →</button></div>{state.completed.length ? <ul className="mt-5 divide-y divide-white/8">{state.completed.slice(0, 4).map(session => { const activity = activityForSession(state, session); const when = isDurationOnly(session) ? `${session.localDate} · Duration only` : new Date(session.startedAt!).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }); return <li key={session.id} className="flex min-w-0 items-center gap-3 py-3"><span aria-hidden="true" className="flex size-9 shrink-0 items-center justify-center rounded-lg text-[#0d1117]" style={{ backgroundColor: activity.color }}>{iconGlyph(activity.icon)}</span><span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold">{session.name}</span><span className="mt-1 block truncate text-xs text-[#9ba8b8]">{when}</span></span><span className="shrink-0 font-mono text-sm tabular-nums text-[#d6e3ee]">{compactTime(duration(session, session.endedAt ?? now))}</span></li>; })}</ul> : <div className="mt-5 rounded-xl border border-dashed border-white/10 bg-white/[.025] p-6 text-sm text-[#9ba8b8]">Completed sessions will appear here after your first timer or manual log.</div>}</section>
     </div>
-    <section aria-labelledby="recent-title" className="th-card th-recent-card p-5 sm:p-7"><div className="flex items-center justify-between gap-3"><h2 id="recent-title" className="text-xl font-bold">Recent activity</h2><button type="button" onClick={onOpenHistory} className="text-xs text-cyan-300">View history →</button></div>{state.completed.length ? <ul className="mt-3 space-y-3">{state.completed.slice(0, 2).map(session => <li key={session.id} className="flex justify-between gap-4 text-sm"><span className="truncate">{session.name}</span><span className="shrink-0 text-xs text-[#94a9c4]">{session.startedAt === null ? 'Duration only' : new Date(session.startedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</span></li>)}</ul> : <p className="mt-3 text-sm text-[#94a9c4]">Your completed activities will appear here.</p>}</section>
   </div>;
 }

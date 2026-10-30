@@ -33,9 +33,9 @@ export function ActivityCalendar({ state, now, selectedDay: controlledDay, onSel
   const selectedMinutes = (totals.get(selectedDay)?.milliseconds ?? 0) / 60000;
   const selectedLabel = new Date(localDayStart(selectedDay)).toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
 
-  return <section className="panel mt-8 p-6 sm:p-8" aria-labelledby="activity-calendar-title">
+  return <section className="panel p-5 sm:p-6" aria-labelledby="activity-calendar-title">
     <div className="flex flex-wrap items-start justify-between gap-4">
-      <div><p className="eyebrow">CONSISTENCY</p><h2 id="activity-calendar-title" className="mt-2 text-lg font-semibold">Activity calendar</h2><p className="mt-2 max-w-2xl text-sm text-slate-400">Study/focus minutes by local calendar day. Recorded breaks and pauses are shown elsewhere and do not advance activity streaks or habit goals.</p></div>
+      <div><p className="eyebrow">CONSISTENCY</p><h2 id="activity-calendar-title" className="mt-2 text-xl font-bold sm:text-2xl">Activity calendar</h2><p className="mt-2 max-w-2xl text-sm text-slate-400">Productive minutes by local calendar day. Recorded breaks and pauses do not advance activity streaks or habit goals.</p></div>
       <label className="text-xs text-slate-400">Activity
         <select value={filter} onChange={event => setFilter(event.target.value)} className="mt-2 block min-w-44 rounded-xl border border-white/10 bg-[var(--background)] px-3 py-2.5 text-sm text-white">
           <option value="">All activities</option>{names.map(name => <option key={name} value={name}>{name}</option>)}

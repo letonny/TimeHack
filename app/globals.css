@@ -58,3 +58,45 @@ progress::-moz-progress-bar { background: #5eead4; }
 .home-mode .home-dial-row .home-summary-dial { height: 100%; background: radial-gradient(circle at 50% -25%, rgba(144, 185, 196, .13), transparent 67%), linear-gradient(145deg, #282e30, #1c2224); border: 1px solid #3a4447; box-shadow: inset 0 1px rgba(255,255,255,.055), 0 16px 38px rgba(0,0,0,.14); }
 .home-mode .home-dial-row > :nth-child(2) .home-summary-dial { background: radial-gradient(circle at 50% -25%, rgba(155, 156, 182, .13), transparent 67%), linear-gradient(145deg, #292d31, #1d2225); }
 .home-mode .home-dial-row > :nth-child(3) .home-summary-dial { background: radial-gradient(circle at 50% -25%, rgba(90, 184, 123, .14), transparent 67%), linear-gradient(145deg, #28312c, #1c2421); }
+
+/* TimeHack analytics design tokens and Home-only composition. */
+.home-mode { --analytics-bg: #0d1117; --analytics-surface: #1b222b; --analytics-elevated: #252d36; --analytics-border: #34404c; --analytics-cyan: #35c9f4; --analytics-emerald: #42d9a2; --analytics-violet: #a78bfa; --analytics-amber: #f4be59; --analytics-muted: #9ba8b8; background: radial-gradient(ellipse at 73% 0%, rgba(39, 90, 104, .13), transparent 45%), var(--analytics-bg); color: #f4f7fb; }
+.home-mode .analytics-home { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif; }
+.home-mode .analytics-eyebrow { color: #64d9ef; font-size: .68rem; font-weight: 800; letter-spacing: .15em; }
+.home-mode .home-shell .analytics-card { background: radial-gradient(ellipse at 82% 0%, rgba(45, 100, 126, .1), transparent 55%), linear-gradient(145deg, #202a34, #1a222b); border-color: var(--analytics-border); }
+.home-mode .home-shell .th-ring-card { background: radial-gradient(circle at 50% 45%, rgba(53, 152, 178, .12), transparent 50%), linear-gradient(150deg, #202b34, #171f28); border-color: #385565; }
+.home-mode .home-shell .analytics-session { background: radial-gradient(ellipse at 0% 0%, rgba(42, 168, 139, .18), transparent 55%), linear-gradient(145deg, #1d3434, #19242b); border-color: #37625e; }
+.home-mode .home-shell .analytics-session--live { box-shadow: inset 0 1px rgba(255,255,255,.04), 0 0 0 1px rgba(66,217,162,.1), 0 18px 44px rgba(0,0,0,.17); }
+.analytics-metric { --metric-color: #35c9f4; border: 1px solid color-mix(in srgb, var(--metric-color) 28%, #34404c); background: radial-gradient(ellipse at 100% 0%, color-mix(in srgb, var(--metric-color) 13%, transparent), transparent 65%), linear-gradient(145deg, #202a34, #1b222b); box-shadow: inset 0 1px rgba(255,255,255,.035); }
+.analytics-metric--emerald { --metric-color: #42d9a2; }
+.analytics-metric--violet { --metric-color: #a78bfa; }
+.analytics-metric--amber { --metric-color: #f4be59; }
+.analytics-metric-dot { background: var(--metric-color); box-shadow: 0 0 12px color-mix(in srgb, var(--metric-color) 40%, transparent); }
+.analytics-action { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border: 1px solid #3a4855; border-radius: .75rem; background: #202a34; color: #dce7ef; padding: .65rem .9rem; font-weight: 700; }
+.analytics-action--cyan { border-color: #3b6875; background: linear-gradient(135deg, #1b3945, #202a34); color: #9be8f9; }
+.analytics-action--violet { border-color: #554d76; background: linear-gradient(135deg, #302c45, #202a34); color: #c9b6ff; }
+.analytics-action--activity { border-color: color-mix(in srgb, var(--shortcut-color) 42%, #34404c); background: linear-gradient(135deg, color-mix(in srgb, var(--shortcut-color) 14%, #202a34), #202a34); }
+.analytics-chart-grid { background: linear-gradient(to top, transparent calc(50% - .5px), rgba(151,174,192,.16) 50%, transparent calc(50% + .5px)); }
+.analytics-layout { display: grid; gap: 1.25rem; align-items: start; }
+@media (min-width: 1024px) {
+  .analytics-layout { grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); grid-template-areas: "activity session" "trend ring" "recent goals"; gap: 1.5rem; }
+  .analytics-layout > :nth-child(1) { grid-area: session; }
+  .analytics-layout > :nth-child(2) { grid-area: activity; }
+  .analytics-layout > :nth-child(3) { grid-area: ring; }
+  .analytics-layout > :nth-child(4) { grid-area: trend; }
+  .analytics-layout > :nth-child(5) { grid-area: goals; }
+  .analytics-layout > :nth-child(6) { grid-area: recent; }
+}
+
+/* Shared product surface for Timer, History, Habits, and Settings. */
+.product-mode:not(.home-mode) { --background: #0d1117; --foreground: #f4f7fb; --surface: #1b222b; --surface-border: #34404c; --muted: #9ba8b8; --accent: #35c9f4; background: radial-gradient(ellipse at 76% 0%, rgba(35, 87, 103, .13), transparent 46%), var(--background); color: var(--foreground); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif; }
+.product-mode > aside, .product-mode > nav, .product-mode > header { background: #171b1c; }
+.product-mode > aside { border-right: 1px solid #303637; }
+.product-mode:not(.home-mode) .panel { min-width: 0; background: radial-gradient(ellipse at 90% 0%, rgba(48, 105, 129, .095), transparent 55%), linear-gradient(145deg, #202a34, #1a222b); border: 1px solid #34404c; border-radius: 20px; box-shadow: inset 0 1px rgba(255,255,255,.035), 0 14px 34px rgba(0,0,0,.12); }
+.product-mode:not(.home-mode) .eyebrow { color: #64d9ef; font-size: .68rem; font-weight: 800; letter-spacing: .15em; }
+.product-mode:not(.home-mode) .primary { background: #35c9f4; color: #0d1117; }
+.product-mode:not(.home-mode) .primary:hover { background: #77dcf5; }
+.product-mode:not(.home-mode) .timer-hero { background: radial-gradient(circle at 50% 38%, rgba(32, 160, 184, .16), transparent 48%), linear-gradient(145deg, #1b323d, #1a222b); border-color: #3b6270; }
+.summary-tile { min-width: 0; border: 1px solid #385566; border-radius: 18px; padding: 1rem; background: radial-gradient(ellipse at 100% 0%, rgba(53,201,244,.12), transparent 68%), linear-gradient(145deg,#202a34,#1a222b); }
+.summary-tile--emerald { border-color: #3c625a; background: radial-gradient(ellipse at 100% 0%, rgba(66,217,162,.12), transparent 68%), linear-gradient(145deg,#202c2c,#1a222b); }
+.summary-tile--violet { border-color: #554e70; background: radial-gradient(ellipse at 100% 0%, rgba(167,139,250,.12), transparent 68%), linear-gradient(145deg,#292b3a,#1a222b); }
