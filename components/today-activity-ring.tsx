@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react';
 import { activityForName, activityForSession } from '@/lib/activity-metadata';
 import { buildDayTimeline, type DayTimelineCategory } from '@/lib/analytics';
+import { ringArc } from '@/lib/ring-geometry';
 import type { TimerState } from '@/lib/timer';
 
 const categoryColors: Record<Exclude<DayTimelineCategory, 'activity'>, string> = {
@@ -50,17 +51,14 @@ export function TodayActivityRing({ state, now }: { state: TimerState; now: numb
   return <section aria-labelledby="today-title" className="rounded-[1.6rem] border border-white/10 bg-[#111f33] p-5 shadow-[0_24px_60px_rgba(0,0,0,.12)] sm:p-6">
     <div><p className="eyebrow">TODAY OVERVIEW</p><h2 id="today-title" className="mt-2 text-xl font-semibold tracking-tight text-white">24-hour activity</h2><p className="mt-1 text-xs text-slate-400">Your local day, as it happens</p></div>
     <div className="mt-5 grid gap-5 md:grid-cols-[minmax(0,1fr)_minmax(190px,.85fr)] md:items-center">
-      <div className="mx-auto w-full max-w-[340px]">
+      <div className="mx-auto w-full max-w-[270px] sm:max-w-[340px]">
         <div className="relative aspect-square">
           <svg viewBox="0 0 100 100" className="size-full" aria-label={`Today's ${compactDuration(timeline.dayMilliseconds)} local-day activity ring. ${compactDuration(timeline.trackedMilliseconds)} total tracked time.`}>
             <circle cx="50" cy="50" r={radius} fill="none" stroke="#203247" strokeWidth="7"/>
             {timeline.slices.map(slice => {
-              const length = slice.milliseconds / timeline.dayMilliseconds * circumference;
-              const offset = (slice.startedAt - timeline.dayStartedAt) / timeline.dayMilliseconds * circumference;
-              const gap = Math.min(.65, length * .2);
-              const drawn = Math.max(.08, length - gap * 2);
+              const arc = ringArc(slice.startedAt, slice.milliseconds, timeline.dayStartedAt, timeline.dayMilliseconds, circumference);
               const label = `${slice.name}, ${compactDuration(slice.milliseconds)}, ${timeLabel(slice.startedAt)} to ${timeLabel(slice.endedAt)}`;
-              return <circle key={slice.id} cx="50" cy="50" r={radius} fill="none" stroke={colorFor(slice.category, slice.name, slice.sessionId)} strokeWidth="7" strokeLinecap="butt" strokeDasharray={`${drawn} ${circumference - drawn}`} strokeDashoffset={-(offset + gap)} transform="rotate(-90 50 50)" tabIndex={0} role="button" aria-label={label} className="cursor-pointer outline-none transition-opacity focus:opacity-100" opacity={selected && selected.id !== slice.id ? .4 : 1} onMouseEnter={() => setHoveredId(slice.id)} onMouseLeave={() => setHoveredId(null)} onFocus={() => setHoveredId(slice.id)} onBlur={() => setHoveredId(null)} onClick={() => setSelectedId(current => current === slice.id ? null : slice.id)} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setSelectedId(current => current === slice.id ? null : slice.id); } }}><title>{label}</title></circle>;
+              return <circle key={slice.id} cx="50" cy="50" r={radius} fill="none" stroke={colorFor(slice.category, slice.name, slice.sessionId)} strokeWidth="7" strokeLinecap="butt" strokeDasharray={`${arc.length} ${circumference - arc.length}`} strokeDashoffset={-arc.offset} transform="rotate(-90 50 50)" tabIndex={0} role="button" aria-label={label} className="cursor-pointer outline-none transition-opacity focus:opacity-100" opacity={selected && selected.id !== slice.id ? .4 : 1} onMouseEnter={() => setHoveredId(slice.id)} onMouseLeave={() => setHoveredId(null)} onFocus={() => setHoveredId(slice.id)} onBlur={() => setHoveredId(null)} onClick={() => setSelectedId(current => current === slice.id ? null : slice.id)} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setSelectedId(current => current === slice.id ? null : slice.id); } }}><title>{label}</title></circle>;
             })}
           </svg>
           <div className="pointer-events-none absolute inset-[25%] flex flex-col items-center justify-center rounded-full bg-[#111f33] text-center">

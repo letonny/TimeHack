@@ -24,6 +24,8 @@ function SignOutButton() {
   return <button type="submit" disabled={pending} className="rounded-lg border border-white/15 px-3 py-2 text-xs font-medium text-slate-300 hover:bg-white/10">{pending ? 'Signing out…' : 'Sign out'}</button>;
 }
 
+const navigationItems = ['home', 'timer', 'history', 'habits', 'settings'] as const;
+
 export function Dashboard() {
   const timer = useTimer();
   const [screen, setScreen] = useState<'home' | 'timer' | 'history' | 'habits' | 'settings'>('home');
@@ -40,8 +42,14 @@ export function Dashboard() {
   const recentSession = recentSessionId ? timer.state.completed.find(session => session.id === recentSessionId) : null;
   const syncLabel = timer.syncing ? 'Syncing' : timer.pending ? `${timer.pending} pending` : timer.syncError ? 'Sync issue' : timer.ready ? 'Synced' : 'Loading';
 
-  return <div className="min-h-screen">
-    <header className="border-b border-white/8"><div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-5 py-4 sm:px-8">
+  return <div className="min-h-screen lg:pl-64">
+    <aside className="fixed inset-y-0 left-0 hidden w-64 flex-col border-r border-white/8 bg-[#0d192a] px-4 py-7 lg:flex">
+      <Link href="/" className="flex items-center gap-3 px-3 text-xl font-bold tracking-tight"><span aria-hidden="true" className="flex size-9 items-center justify-center rounded-xl bg-teal-300 text-lg text-[#0b1424]">↗</span>TimeHack<span className="sr-only"> home</span></Link>
+      <p className="mt-12 px-3 text-[10px] font-semibold tracking-[.2em] text-slate-500 uppercase">Workspace</p>
+      <nav aria-label="Main navigation" className="mt-3 space-y-1">{navigationItems.map(item => <button key={item} type="button" aria-current={screen === item ? 'page' : undefined} onClick={() => setScreen(item)} className={`flex w-full items-center rounded-xl px-4 py-3 text-left text-sm font-medium capitalize ${screen === item ? 'bg-teal-300/12 text-teal-200' : 'text-slate-300 hover:bg-white/5 hover:text-white'}`}>{item}</button>)}</nav>
+      <div className="mt-auto border-t border-white/8 px-3 pt-5"><div role="status" className="flex items-center gap-2 text-xs text-slate-400" title={timer.syncError || 'Account synchronization status'}><span className={`size-2 rounded-full ${timer.syncError ? 'bg-amber-300' : timer.syncing || timer.pending ? 'bg-sky-300' : timer.ready ? 'bg-teal-300' : 'bg-slate-500'}`}/>{syncLabel}</div><form action={logout} className="mt-5" onSubmit={() => { navigator.serviceWorker?.controller?.postMessage({ type: 'timehack-account', userId: '' }); }}><SignOutButton/></form></div>
+    </aside>
+    <header className="border-b border-white/8 lg:hidden"><div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-5 py-4 sm:px-8">
       <Link href="/" className="flex items-center gap-3 text-xl font-bold tracking-tight"><span aria-hidden="true" className="flex size-9 items-center justify-center rounded-xl bg-teal-300 text-lg text-[#0b1424]">↗</span>TimeHack<span className="sr-only"> home</span></Link>
       <div className="flex items-center gap-3"><div role="status" className="flex items-center gap-2 text-[11px] text-slate-400" title={timer.syncError || 'Account synchronization status'}><span className={`size-1.5 rounded-full ${timer.syncError ? 'bg-amber-300' : timer.syncing || timer.pending ? 'bg-sky-300' : timer.ready ? 'bg-teal-300' : 'bg-slate-500'}`}/><span className="hidden sm:inline">{syncLabel}</span></div><form action={logout} onSubmit={() => { navigator.serviceWorker?.controller?.postMessage({ type: 'timehack-account', userId: '' }); }}><SignOutButton/></form></div>
     </div></header>
@@ -74,6 +82,6 @@ export function Dashboard() {
       {screen === 'settings' && <><AccountSettings key={`${timer.state.profile.displayName}:${timer.state.activities.map(activity => `${activity.id}:${activity.name}:${activity.icon}:${activity.color}`).join('|')}`} profile={timer.state.profile} activities={timer.state.activities} ready={timer.ready} onSaveProfile={timer.saveProfile} onSaveActivity={timer.saveActivity} onDeleteActivity={timer.deleteActivity}/><NotificationSettings /></>}
       <footer className="mt-8 flex flex-wrap justify-between gap-3 text-xs text-slate-500"><p>Your time, clearly recorded.</p><p>Habits and sessions sync with your account.</p></footer>
     </main>
-    <nav aria-label="Main navigation" className="fixed inset-x-0 bottom-0 z-30 border-t border-white/10 bg-[#0b1424]/95 px-2 pt-2 backdrop-blur" style={{ paddingBottom: 'max(.5rem, env(safe-area-inset-bottom))' }}><div className="mx-auto grid max-w-3xl grid-cols-5 gap-1">{(['home', 'timer', 'history', 'habits', 'settings'] as const).map(item => <button key={item} type="button" aria-current={screen === item ? 'page' : undefined} onClick={() => setScreen(item)} className={`rounded-xl px-1 py-3 text-xs font-medium capitalize ${screen === item ? 'bg-teal-300 text-slate-950' : 'text-slate-300 hover:bg-white/10'}`}>{item}</button>)}</div></nav>
+    <nav aria-label="Main navigation" className="fixed inset-x-0 bottom-0 z-30 border-t border-white/10 bg-[#0b1424]/95 px-2 pt-2 backdrop-blur lg:hidden" style={{ paddingBottom: 'max(.5rem, env(safe-area-inset-bottom))' }}><div className="mx-auto grid max-w-3xl grid-cols-5 gap-1">{navigationItems.map(item => <button key={item} type="button" aria-current={screen === item ? 'page' : undefined} onClick={() => setScreen(item)} className={`rounded-xl px-1 py-3 text-xs font-medium capitalize ${screen === item ? 'bg-teal-300 text-slate-950' : 'text-slate-300 hover:bg-white/10'}`}>{item}</button>)}</div></nav>
   </div>;
 }
