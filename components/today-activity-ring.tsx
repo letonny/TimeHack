@@ -25,14 +25,18 @@ export function TodayActivityRing({ state, now }: { state: TimerState; now: numb
   const [hoveredId, setHoveredId] = useState<string | null>(null);
 
   const timeline = useMemo(() => buildDayTimeline(state, now, undefined, { includeBreaks: true }), [state, now]);
+  const laneNames = [...new Set(timeline.slices.filter(slice => slice.category === 'activity').map(slice => slice.name))];
   const metadataFor = (name: string, sessionId?: string) => {
     const session = sessionId ? [...state.completed, ...(state.active ? [state.active] : [])].find(item => item.id === sessionId) : null;
     return session ? activityForSession(state, session) : activityForName(state, name);
   };
-  const colorFor = (category: DayTimelineCategory, name: string, sessionId?: string) => category === 'activity' ? metadataFor(name, sessionId).color : categoryColors[category];
+  const colorFor = (category: DayTimelineCategory, name: string, sessionId?: string) => {
+    if (category !== 'activity') return categoryColors[category];
+    const metadata = metadataFor(name, sessionId);
+    return metadata.id ? metadata.color : ['#25c7ff', '#6cf878', '#b75dff', '#ff674c', '#15ebd1'][Math.max(0, laneNames.indexOf(name)) % 5];
+  };
   const selected = timeline.slices.find(slice => slice.id === (hoveredId ?? selectedId)) ?? null;
-  const radius = 42;
-  const circumference = 2 * Math.PI * radius;
+  const radii = [43, 35, 27];
   const legend = new Map<string, { category: DayTimelineCategory | 'unscheduled'; name: string; milliseconds: number; color: string }>();
   for (const slice of timeline.slices) {
     const metadata = slice.category === 'activity' ? metadataFor(slice.name, slice.sessionId) : null;
@@ -48,22 +52,25 @@ export function TodayActivityRing({ state, now }: { state: TimerState; now: numb
     else legend.set(key, { category: 'unscheduled', name: `${session.name} · time not specified`, milliseconds: session.durationMilliseconds ?? 0, color: activity.color });
   }
 
-  return <section aria-labelledby="today-title" className="th-card min-w-0 p-4 sm:p-6">
-    <div><h2 id="today-title" className="text-lg font-semibold tracking-tight">Your 24-hour day</h2><p className="mt-1 hidden text-xs text-[#94a9c4] sm:block">Time-of-day activity · Tap a segment for details</p></div>
+  return <section aria-labelledby="today-title" className="th-card th-ring-card min-w-0 p-4 sm:p-6">
+    <div className="flex items-center justify-between gap-3"><div><p className="eyebrow">ACTIVITY RINGS</p><h2 id="today-title" className="mt-1 text-xl font-bold tracking-tight">Your 24-hour day</h2></div><span className="rounded-xl border border-white/10 px-3 py-2 text-[10px] text-slate-300">LIVE TODAY</span></div>
     <div className="mt-5">
-      <div className="mx-auto w-full max-w-[240px] sm:max-w-[310px]">
+      <div className="mx-auto w-full max-w-[280px] sm:max-w-[390px]">
         <div className="relative aspect-square">
           <svg viewBox="0 0 100 100" className="size-full" aria-label={`Today's ${compactDuration(timeline.dayMilliseconds)} local-day activity ring. ${compactDuration(timeline.trackedMilliseconds)} total tracked time.`}>
-            <circle cx="50" cy="50" r={radius} fill="none" stroke="#293c55" strokeWidth="8"/>
-            {timeline.slices.map(slice => {
+            {radii.map(radius => <circle key={radius} cx="50" cy="50" r={radius} fill="none" stroke="#213047" strokeWidth="5.5"/>)}
+            {timeline.slices.filter(slice => slice.category === 'activity' || slice.category === 'break').map(slice => {
+              const lane = slice.category === 'break' ? 2 : Math.max(0, laneNames.indexOf(slice.name)) % radii.length;
+              const radius = radii[lane];
+              const circumference = 2 * Math.PI * radius;
               const arc = ringArc(slice.startedAt, slice.milliseconds, timeline.dayStartedAt, timeline.dayMilliseconds, circumference);
               const label = `${slice.name}, ${compactDuration(slice.milliseconds)}, ${timeLabel(slice.startedAt)} to ${timeLabel(slice.endedAt)}`;
-              return <circle key={slice.id} cx="50" cy="50" r={radius} fill="none" stroke={colorFor(slice.category, slice.name, slice.sessionId)} strokeWidth="8" strokeLinecap="butt" strokeDasharray={`${arc.length} ${circumference - arc.length}`} strokeDashoffset={-arc.offset} transform="rotate(-90 50 50)" tabIndex={0} role="button" aria-label={label} className="cursor-pointer outline-none transition-opacity focus:opacity-100" opacity={selected && selected.id !== slice.id ? .4 : 1} onMouseEnter={() => setHoveredId(slice.id)} onMouseLeave={() => setHoveredId(null)} onFocus={() => setHoveredId(slice.id)} onBlur={() => setHoveredId(null)} onClick={() => setSelectedId(current => current === slice.id ? null : slice.id)} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setSelectedId(current => current === slice.id ? null : slice.id); } }}><title>{label}</title></circle>;
+              return <circle key={slice.id} cx="50" cy="50" r={radius} fill="none" stroke={colorFor(slice.category, slice.name, slice.sessionId)} strokeWidth="5.5" strokeLinecap="butt" strokeDasharray={`${arc.length} ${circumference - arc.length}`} strokeDashoffset={-arc.offset} transform="rotate(-90 50 50)" tabIndex={0} role="button" aria-label={label} className="cursor-pointer outline-none transition-opacity focus:opacity-100" opacity={selected && selected.id !== slice.id ? .4 : 1} onMouseEnter={() => setHoveredId(slice.id)} onMouseLeave={() => setHoveredId(null)} onFocus={() => setHoveredId(slice.id)} onBlur={() => setHoveredId(null)} onClick={() => setSelectedId(current => current === slice.id ? null : slice.id)} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setSelectedId(current => current === slice.id ? null : slice.id); } }}><title>{label}</title></circle>;
             })}
           </svg>
-          <div className="pointer-events-none absolute inset-[25%] flex flex-col items-center justify-center rounded-full text-center">
-            <span className="mb-1 text-[10px] font-semibold text-[#94a9c4]">TODAY&apos;S ACTIVITY</span>
-            <span className="font-mono text-[clamp(1.55rem,6vw,2.7rem)] font-semibold tracking-tight tabular-nums text-white">{compactDuration(timeline.trackedMilliseconds)}</span>
+          <div className="pointer-events-none absolute inset-[36%] flex flex-col items-center justify-center rounded-full text-center">
+            <span className="mb-1 text-[10px] font-semibold text-[#94a9c4]">TODAY</span>
+            <span className="whitespace-nowrap text-[clamp(1.2rem,4vw,2.3rem)] font-bold tracking-tight tabular-nums text-white">{compactDuration(timeline.trackedMilliseconds)}</span>
             <span className="mt-1 text-[10px] text-[#94a9c4] sm:text-xs">of 24 hours</span>
           </div>
         </div>
