@@ -9,6 +9,7 @@ import { createClient } from '@/lib/supabase/client';
 import { activeSet, duration, formatDuration, isDurationOnly, isRunning, setDuration, type Session, type TimerState } from '@/lib/timer';
 import { ActivityOverDayChart, AnalyticsMetric, ProductivityTrendChart } from './home-analytics';
 import { TodayActivityRing } from './today-activity-ring';
+import type { IntervalCorrection } from '@/lib/session-corrections';
 
 function compactTime(milliseconds: number) {
   const totalMinutes = Math.floor(Math.max(0, milliseconds) / 60_000);
@@ -33,11 +34,13 @@ function CurrentSession({ session, now, ready, onOpenTimer, onPause, onResume, o
   </section>;
 }
 
-export function HomeDashboard({ state, initialNow, ready, onOpenTimer, onOpenHistory, onOpenHabits, onStartActivity, onPause, onResume, onFinish, onNextSet, onEndSet }: {
+export function HomeDashboard({ state, initialNow, ready, onOpenTimer, onOpenHistory, onOpenHabits, onStartActivity, onPause, onResume, onFinish, onNextSet, onEndSet, revisions = {}, onSaveSession, onCorrectIntervals }: {
   state: TimerState; initialNow: number; ready: boolean;
   onOpenTimer: () => void; onOpenHistory: () => void; onOpenHabits: () => void;
   onStartActivity: (name: string) => boolean;
   onPause: () => boolean; onResume: () => boolean; onFinish: () => boolean; onNextSet: () => boolean; onEndSet: () => boolean;
+  revisions?: Record<string, number>; onSaveSession?: (session: Session) => boolean;
+  onCorrectIntervals?: (sessionId: string, correction: IntervalCorrection) => Promise<string | null>;
 }) {
   const [now, setNow] = useState(initialNow);
   const [accountFirstName, setAccountFirstName] = useState<string | null>(null);
@@ -103,7 +106,7 @@ export function HomeDashboard({ state, initialNow, ready, onOpenTimer, onOpenHis
     <div className="analytics-layout min-w-0">
       <CurrentSession session={state.active} now={now} ready={ready} onOpenTimer={onOpenTimer} onPause={onPause} onResume={onResume} onFinish={onFinish} onNextSet={onNextSet} onEndSet={onEndSet}/>
       <ActivityOverDayChart buckets={analytics.buckets} selectedActivity={chartActivity} activityNames={availableActivities} onSelectActivity={setSelectedActivity} dayLabel={new Date(localDayStart(anchorKey)).toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' })} untimedMilliseconds={analytics.day.unscheduledMilliseconds}/>
-      <TodayActivityRing state={state} now={now} dayKey={anchorKey} onOpenTimer={onOpenTimer}/>
+      <TodayActivityRing state={state} now={now} dayKey={anchorKey} onOpenTimer={onOpenTimer} revisions={revisions} onSave={onSaveSession} onCorrect={onCorrectIntervals}/>
       <ProductivityTrendChart points={analytics.trend} label={period === 'day' ? 'Past 7 days' : periodLabel} comparison={comparison}/>
       <section aria-labelledby="goals-title" className="th-card analytics-card min-w-0 p-5 sm:p-6"><div className="flex items-center justify-between gap-3"><div><p className="analytics-eyebrow">DAILY HABITS</p><h2 id="goals-title" className="mt-1 text-xl font-bold sm:text-2xl">Goal progress</h2></div><button type="button" onClick={onOpenHabits} className="text-xs font-semibold text-[#35c9f4]">View habits →</button></div>
         {analytics.goalProgress.length ? <><p className="mt-2 text-xs text-[#9ba8b8]">{period === 'day' ? 'Selected day' : `Current daily targets across elapsed days in this ${period}`}</p><ul className="mt-5 space-y-4">{analytics.goalProgress.slice(0, 4).map(progress => { const today = analytics.todayGoals.find(item => item.habit.id === progress.habit.id); const color = activityForName(state, progress.habit.name).color; return <li key={progress.habit.id} className="min-w-0"><div className="flex items-center justify-between gap-2 text-sm"><span className="min-w-0 truncate font-semibold"><span className="mr-2 inline-block size-2 rounded-full" style={{ backgroundColor: color }}/>{progress.habit.name}</span><span className="shrink-0 tabular-nums text-[#b7c5d1]">{compactTime(progress.minutes * 60_000)} / {compactTime(progress.targetMinutes * 60_000)}</span></div><div className="mt-2 h-2 overflow-hidden rounded-full bg-[#34404a]"><div className="h-full rounded-full" style={{ width: `${progress.percentage}%`, backgroundColor: color }}/></div><p className="mt-1 text-[11px] text-[#9ba8b8]">{progress.completedDays}/{progress.eligibleDays} daily goals met · {progress.remainingMinutes > 0 ? `${compactTime(progress.remainingMinutes * 60_000)} to combined target` : 'Combined time target reached'}</p><p className="mt-1 text-[11px] text-[#9ba8b8]">Today: {compactTime((today?.minutes ?? 0) * 60_000)} / {compactTime(progress.habit.goalMinutes * 60_000)}</p></li>; })}</ul>{analytics.goalProgress.length > 4 && <button type="button" onClick={onOpenHabits} className="mt-4 text-xs text-[#35c9f4]">See all {analytics.goalProgress.length} habits →</button>}</> : <div className="mt-5 rounded-xl border border-dashed border-white/10 bg-white/[.025] p-5"><p className="font-medium">Give an activity a daily goal</p><p className="mt-2 text-sm text-[#9ba8b8]">Time-based habits show real progress here, without a default target.</p><button type="button" onClick={onOpenHabits} className="mt-4 rounded-lg bg-[#293e48] px-4 py-2 text-xs font-bold text-[#86dff6]">Create a habit →</button></div>}
