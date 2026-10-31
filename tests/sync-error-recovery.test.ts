@@ -144,7 +144,7 @@ test('applyChange routes reminder events separately and keeps RPC arguments inta
   const { client, rpcs } = mockClient({ rpcRevision: 7 });
   assert.equal(await applyChange(client, habit), 7);
   assert.equal(await applyChange(client, reminder), 7);
-  assert.deepEqual(rpcs.map(call => call.name), ['apply_timehack_change', 'apply_timehack_reminder_change']);
+  assert.deepEqual(rpcs.map(call => call.name), ['apply_timehack_classified_change', 'apply_timehack_reminder_change']);
   assert.equal(rpcs[1].parameters.p_event_id, reminder.eventId);
   assert.equal(rpcs[1].parameters.p_expected_revision, reminder.expectedRevision);
   assert.deepEqual(rpcs[1].parameters.p_payload, reminder.payload);
@@ -173,7 +173,7 @@ test('failed queue replay reports safe context and leaves the pending event reco
     assert.ok(error instanceof SyncError);
     assert.equal(error.kind, 'invalid');
     assert.equal(error.operation, 'replay');
-    assert.equal(error.resource, 'apply_timehack_change');
+    assert.equal(error.resource, 'apply_timehack_classified_change');
     assert.equal(error.entityType, 'habit');
     assert.equal(error.action, 'save');
     assert.equal(error.retryable, false);

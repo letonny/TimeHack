@@ -27,8 +27,8 @@ export function QuickLog({ state, now, ready, onSave }: { state: TimerState; now
   const build = () => {
     const activity = activityForName(state, name);
     return method === 'range'
-      ? createManualRange({ id: crypto.randomUUID(), name, startDate, startTime, endDate, endTime, activityId: activity.id || null, note }, now)
-      : createManualDuration({ id: crypto.randomUUID(), name, localDate: date, hours: Number(hours), minutes: Number(minutes), activityId: activity.id || null, note }, today);
+      ? createManualRange({ id: crypto.randomUUID(), name, startDate, startTime, endDate, endTime, activityId: activity.id || null, note, countsProductive: activity.countsProductive !== false }, now)
+      : createManualDuration({ id: crypto.randomUUID(), name, localDate: date, hours: Number(hours), minutes: Number(minutes), activityId: activity.id || null, note, countsProductive: activity.countsProductive !== false }, today);
   };
   return <div className="mt-4">
     <button type="button" onClick={() => { savedRef.current = false; setOpen(value => !value); }} className="w-full rounded-xl border border-teal-300/30 bg-teal-300/5 px-5 py-3.5 text-sm font-semibold text-teal-200 hover:bg-teal-300/10">＋ Log Time</button>

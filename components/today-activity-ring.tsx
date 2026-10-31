@@ -44,10 +44,10 @@ export function TodayActivityRing({ state, now, dayKey = localDayKey(now), onOpe
   const legend = new Map<string, { category: DayTimelineCategory | 'unscheduled'; name: string; milliseconds: number; color: string }>();
   for (const slice of timeline.slices) {
     const metadata = slice.category === 'activity' ? metadataFor(slice.name, slice.sessionId) : null;
-    const key = `${slice.category}:${metadata?.id || slice.name}`;
+    const key = `${slice.category}:${metadata?.id || slice.name}:${slice.countsProductive === false ? 'personal' : 'productive'}`;
     const item = legend.get(key);
     if (item) item.milliseconds += slice.milliseconds;
-    else legend.set(key, { category: slice.category, name: slice.name, milliseconds: slice.milliseconds, color: colorFor(slice.category, slice.name, slice.sessionId) });
+    else legend.set(key, { category: slice.category, name: slice.category === 'activity' && slice.countsProductive === false ? `${slice.name} · personal` : slice.name, milliseconds: slice.milliseconds, color: colorFor(slice.category, slice.name, slice.sessionId) });
   }
   for (const session of state.completed.filter(item => item.entryType === 'manual_duration' && item.localDate === timeline.dayKey)) {
     const key = `unscheduled:${session.name}`;
@@ -61,7 +61,7 @@ export function TodayActivityRing({ state, now, dayKey = localDayKey(now), onOpe
     <div className="mt-5">
       <div className="mx-auto w-full max-w-[290px] sm:max-w-[330px] 2xl:max-w-[360px]">
         <div className="relative aspect-square">
-          <svg viewBox="0 0 100 100" className="size-full" aria-label={`${dayLabel} ${compactDuration(timeline.dayMilliseconds)} local-day activity ring. ${compactDuration(timeline.trackedMilliseconds)} total tracked time.`}>
+          <svg viewBox="0 0 100 100" className="size-full" aria-label={`${dayLabel} ${compactDuration(timeline.dayMilliseconds)} local-day activity ring. ${compactDuration(timeline.trackedActivityMilliseconds)} total tracked time.`}>
             <defs><linearGradient id="empty-ring-track" x1="0" y1="0" x2="1" y2="1"><stop stopColor="#455c60"/><stop offset=".5" stopColor="#2b393d"/><stop offset="1" stopColor="#43575a"/></linearGradient></defs>
             {(hasTimedActivity ? radii : [43]).map(radius => <circle key={radius} cx="50" cy="50" r={radius} fill="none" stroke={hasTimedActivity ? '#304045' : 'url(#empty-ring-track)'} strokeWidth="5.5"/>)}
             {timeline.slices.filter(slice => slice.category === 'activity' || slice.category === 'break' || slice.category === 'travel').map(slice => {
@@ -72,13 +72,13 @@ export function TodayActivityRing({ state, now, dayKey = localDayKey(now), onOpe
               const rounded = arc.length > 8;
               const visibleOffset = arc.offset + (rounded ? 2.75 : 0);
               const visibleLength = arc.length - (rounded ? 5.5 : 0);
-              const label = `${slice.name}, ${compactDuration(slice.milliseconds)}, ${timeLabel(slice.startedAt)} to ${timeLabel(slice.endedAt)}`;
+              const label = `${slice.name}${slice.category === 'activity' ? slice.countsProductive === false ? ' (personal)' : ' (productive)' : ''}, ${compactDuration(slice.milliseconds)}, ${timeLabel(slice.startedAt)} to ${timeLabel(slice.endedAt)}`;
               return <circle key={slice.id} cx="50" cy="50" r={radius} fill="none" stroke={colorFor(slice.category, slice.name, slice.sessionId)} strokeWidth="5.5" strokeLinecap={rounded ? 'round' : 'butt'} strokeDasharray={`${visibleLength} ${circumference - visibleLength}`} strokeDashoffset={-visibleOffset} transform="rotate(-90 50 50)" tabIndex={0} role="button" aria-label={label} className="cursor-pointer outline-none transition-opacity focus:opacity-100" opacity={selected && selected.id !== slice.id ? .4 : 1} onMouseEnter={() => setHoveredId(slice.id)} onMouseLeave={() => setHoveredId(null)} onFocus={() => setHoveredId(slice.id)} onBlur={() => setHoveredId(null)} onClick={() => setSelectedId(current => current === slice.id ? null : slice.id)} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setSelectedId(current => current === slice.id ? null : slice.id); } }}><title>{label}</title></circle>;
             })}
           </svg>
           <div className="pointer-events-none absolute inset-[28%] flex flex-col items-center justify-center rounded-full text-center">
-            <span className="mb-1 text-[10px] font-semibold text-[#b0c1c5]">{hasTimedActivity ? 'TRACKED' : hasActivity ? 'UNTIMED' : 'READY TO BEGIN'}</span>
-            <span className="whitespace-nowrap text-[clamp(1.2rem,4vw,2.3rem)] font-bold tracking-tight tabular-nums text-white">{compactDuration(timeline.trackedMilliseconds)}</span>
+            <span className="mb-1 text-[10px] font-semibold text-[#b0c1c5]">{hasTimedActivity ? 'TRACKED ACTIVITY' : hasActivity ? 'UNTIMED' : 'READY TO BEGIN'}</span>
+            <span className="whitespace-nowrap text-[clamp(1.2rem,4vw,2.3rem)] font-bold tracking-tight tabular-nums text-white">{compactDuration(timeline.trackedActivityMilliseconds)}</span>
             <span className="mt-1 text-[10px] text-[#94a9c4] sm:text-xs">of {compactDuration(timeline.dayMilliseconds)}</span>
           </div>
         </div>
@@ -88,7 +88,7 @@ export function TodayActivityRing({ state, now, dayKey = localDayKey(now), onOpe
       <div className="min-w-0">
         <h3 className="sr-only">Activity breakdown</h3>
         <ul className="mt-4 flex flex-wrap items-center justify-center gap-x-5 gap-y-2">{[...legend.values()].filter(item => item.category === 'activity' || item.category === 'unscheduled' || item.category === 'break' || item.category === 'travel').map(item => <li key={`${item.category}:${item.name}`}><button type="button" disabled={item.category === 'unscheduled'} className="flex items-center gap-2 text-left disabled:cursor-default disabled:opacity-100" onClick={() => {
-          const slice = timeline.slices.find(candidate => candidate.category === item.category && candidate.name === item.name);
+          const slice = timeline.slices.find(candidate => candidate.category === item.category && candidate.name === item.name.replace(/ · personal$/, '') && (item.name.endsWith(' · personal') ? candidate.countsProductive === false : true));
           setSelectedId(slice?.id ?? null);
         }}><span aria-hidden="true" className="size-2.5 shrink-0 rounded-full" style={{ backgroundColor: item.color }}/><span className="min-w-0 truncate text-xs text-[#94a9c4]">{item.name}</span></button></li>)}</ul>
         {timeline.unscheduledMilliseconds > 0 && <p className="mt-2 text-[11px] leading-relaxed text-slate-500">Time-not-specified entries count toward the total but have no position on the ring.</p>}

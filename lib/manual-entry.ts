@@ -2,11 +2,11 @@ import type { Session } from './timer.ts';
 
 export type ManualRangeInput = {
   id: string; name: string; startDate: string; startTime: string; endDate: string; endTime: string;
-  activityId?: string | null; note?: string;
+  activityId?: string | null; note?: string; countsProductive?: boolean;
 };
 export type ManualDurationInput = {
   id: string; name: string; localDate: string; hours: number; minutes: number;
-  activityId?: string | null; note?: string;
+  activityId?: string | null; note?: string; countsProductive?: boolean;
 };
 
 const validNameAndNote = (nameValue: string, noteValue = '') => {
@@ -35,7 +35,7 @@ export function createManualRange(input: ManualRangeInput, now: number): Session
   const endedAt = localDateTime(input.endDate, input.endTime);
   if (endedAt <= startedAt) throw new Error('End time must be after start time. Use the next date for an overnight entry.');
   if (startedAt > now || endedAt > now) throw new Error('Manual entries cannot be in the future.');
-  return { id: input.id, name, startedAt, endedAt, segments: [{ kind: 'study', startedAt, endedAt }], entryType: 'manual_range', localDate: null, durationMilliseconds: null, activityId: input.activityId ?? null, note };
+  return { id: input.id, name, startedAt, endedAt, segments: [{ kind: 'study', startedAt, endedAt }], entryType: 'manual_range', localDate: null, durationMilliseconds: null, activityId: input.activityId ?? null, note, countsProductive: input.countsProductive !== false };
 }
 
 export function createManualDuration(input: ManualDurationInput, todayKey: string): Session {
@@ -49,5 +49,5 @@ export function createManualDuration(input: ManualDurationInput, todayKey: strin
     throw new Error('Use whole hours from 0–24 and whole minutes from 0–59.');
   const durationMilliseconds = (input.hours * 60 + input.minutes) * 60000;
   if (durationMilliseconds <= 0 || durationMilliseconds > 24 * 60 * 60000) throw new Error('Duration must be between 1 minute and 24 hours.');
-  return { id: input.id, name, startedAt: null, endedAt: null, segments: [], entryType: 'manual_duration', localDate: input.localDate, durationMilliseconds, activityId: input.activityId ?? null, note };
+  return { id: input.id, name, startedAt: null, endedAt: null, segments: [], entryType: 'manual_duration', localDate: input.localDate, durationMilliseconds, activityId: input.activityId ?? null, note, countsProductive: input.countsProductive !== false };
 }

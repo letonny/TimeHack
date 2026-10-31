@@ -162,7 +162,7 @@ export async function applyChange(client: SupabaseClient, change: Change): Promi
       ? 'apply_timehack_set_change'
       : change.entityType === 'reminder'
       ? 'apply_timehack_reminder_change'
-      : 'apply_timehack_change';
+      : 'apply_timehack_classified_change';
   const { data, error } = await client.rpc(rpcName, {
     p_event_id: change.eventId,
     p_entity_type: change.entityType,

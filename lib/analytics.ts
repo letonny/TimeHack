@@ -20,6 +20,7 @@ export type DayTimelineSlice = {
   endedAt: number;
   milliseconds: number;
   sessionId?: string;
+  countsProductive?: boolean;
 };
 export type DayTimeline = {
   dayKey: string;
@@ -29,10 +30,14 @@ export type DayTimeline = {
   elapsedAt: number;
   slices: DayTimelineSlice[];
   activityMilliseconds: number;
+  productiveMilliseconds: number;
+  personalMilliseconds: number;
+  trackedActivityMilliseconds: number;
   breakMilliseconds: number;
   travelMilliseconds: number;
   trackedMilliseconds: number;
   unscheduledMilliseconds: number;
+  unscheduledProductiveMilliseconds: number;
   untrackedMilliseconds: number;
   remainingMilliseconds: number;
 };
@@ -68,6 +73,7 @@ function sessions(state: TimerState): Session[] {
 type TimelineCandidate = {
   category: 'activity' | 'break' | 'travel'; name: string; sessionId: string;
   startedAt: number; endedAt: number; sourceStartedAt: number;
+  countsProductive: boolean;
 };
 
 export function buildDayTimeline(
@@ -97,6 +103,7 @@ export function buildDayTimeline(
         startedAt,
         endedAt,
         sourceStartedAt: segment.startedAt,
+        countsProductive: session.countsProductive !== false,
       });
     }
   }
@@ -113,6 +120,7 @@ export function buildDayTimeline(
     let category: DayTimelineCategory;
     let name: string;
     let sessionId: string | undefined;
+    let countsProductive: boolean | undefined;
     if (startedAt >= elapsedAt) {
       category = 'remaining'; name = 'Remaining today';
     } else {
@@ -124,11 +132,12 @@ export function buildDayTimeline(
       category = chosen?.category ?? 'untracked';
       name = chosen?.name ?? 'Elapsed untracked';
       sessionId = chosen?.sessionId;
+      countsProductive = chosen?.countsProductive;
     }
     const previous = raw.at(-1);
-    if (previous && previous.category === category && previous.name === name && previous.sessionId === sessionId && previous.endedAt === startedAt) {
+    if (previous && previous.category === category && previous.name === name && previous.sessionId === sessionId && previous.countsProductive === countsProductive && previous.endedAt === startedAt) {
       previous.endedAt = endedAt;
-    } else raw.push({ category, name, sessionId, startedAt, endedAt });
+    } else raw.push({ category, name, sessionId, countsProductive, startedAt, endedAt });
   }
 
   const slices: DayTimelineSlice[] = raw.map((slice, index) => ({ ...slice, id: `${dayKey}-${index}`, milliseconds: slice.endedAt - slice.startedAt }));
@@ -136,13 +145,19 @@ export function buildDayTimeline(
   const activityMilliseconds = sum('activity');
   const breakMilliseconds = sum('break');
   const unscheduledMilliseconds = sessions(state).reduce((total, session) => total + (isDurationOnly(session) && session.localDate === dayKey && (!filter || activityKey(session.name) === filter) ? session.durationMilliseconds ?? 0 : 0), 0);
+  const unscheduledProductive = sessions(state).reduce((total, session) => total + (isDurationOnly(session) && session.countsProductive !== false && session.localDate === dayKey && (!filter || activityKey(session.name) === filter) ? session.durationMilliseconds ?? 0 : 0), 0);
+  const productiveMilliseconds = slices.reduce((total, slice) => total + (slice.category === 'activity' && slice.countsProductive !== false ? slice.milliseconds : 0), 0) + unscheduledProductive;
   return {
     dayKey, dayStartedAt, dayEndedAt, dayMilliseconds: dayEndedAt - dayStartedAt, elapsedAt, slices,
     activityMilliseconds,
+    productiveMilliseconds,
+    personalMilliseconds: activityMilliseconds + unscheduledMilliseconds - productiveMilliseconds,
+    trackedActivityMilliseconds: activityMilliseconds + breakMilliseconds + unscheduledMilliseconds,
     breakMilliseconds,
     travelMilliseconds: sum('travel'),
     trackedMilliseconds: activityMilliseconds + breakMilliseconds + sum('travel') + unscheduledMilliseconds,
     unscheduledMilliseconds,
+    unscheduledProductiveMilliseconds: unscheduledProductive,
     untrackedMilliseconds: sum('untracked'),
     remainingMilliseconds: sum('remaining'),
   };

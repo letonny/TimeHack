@@ -19,8 +19,9 @@ export type Session = {
     tripPhase?: 'outbound' | 'arrived' | 'activity' | 'activity_finished' | 'return';
     destination?: string;
     returnDestination?: string;
+    countsProductive?: boolean;
 };
-export type Activity = { id: string; name: string; icon: string; color: string };
+export type Activity = { id: string; name: string; icon: string; color: string; category?: string | null; countsProductive?: boolean };
 export type Profile = { displayName: string };
 export type Weekday = 1 | 2 | 3 | 4 | 5 | 6 | 7;
 export type HabitReminder = {
@@ -51,6 +52,9 @@ export type SessionSummary = {
     studyMilliseconds: number;
     breakMilliseconds: number;
     trackedMilliseconds: number;
+    trackedActivityMilliseconds: number;
+    productiveMilliseconds: number;
+    personalMilliseconds: number;
     travelMilliseconds: number;
     commitmentMilliseconds: number;
     studyShare: number;
@@ -100,17 +104,17 @@ export function endSet(state: TimerState, now: number): TimerState {
         ? { ...item, segments: item.segments.map(part => part.endedAt === null ? { ...part, endedAt: Math.max(now, part.startedAt) } : part) }
         : item) } };
 }
-export function start(state: TimerState, name: string, now: number, id: string, activityId: string | null = null): TimerState {
+export function start(state: TimerState, name: string, now: number, id: string, activityId: string | null = null, countsProductive = true): TimerState {
     if (state.active || !name.trim())
         return state;
-    return { ...state, active: { id, name: name.trim(), startedAt: now, endedAt: null, segments: [{ kind: 'study', startedAt: now, endedAt: null }], sets: [], entryType: 'timer', localDate: null, durationMilliseconds: null, activityId, note: '' } };
+    return { ...state, active: { id, name: name.trim(), startedAt: now, endedAt: null, segments: [{ kind: 'study', startedAt: now, endedAt: null }], sets: [], entryType: 'timer', localDate: null, durationMilliseconds: null, activityId, note: '', countsProductive } };
 }
-export function startTrip(state: TimerState, name: string, now: number, id: string, activityId: string | null = null, destination = '', returnDestination = ''): TimerState {
+export function startTrip(state: TimerState, name: string, now: number, id: string, activityId: string | null = null, destination = '', returnDestination = '', countsProductive = true): TimerState {
     if (state.active || !name.trim()) return state;
     return { ...state, active: { id, name: name.trim(), startedAt: now, endedAt: null,
         segments: [{ kind: 'travel_out', startedAt: now, endedAt: null }], sets: [], entryType: 'timer',
         localDate: null, durationMilliseconds: null, activityId, note: '', tripPhase: 'outbound',
-        destination: destination.trim().slice(0, 120), returnDestination: returnDestination.trim().slice(0, 120) } };
+        destination: destination.trim().slice(0, 120), returnDestination: returnDestination.trim().slice(0, 120), countsProductive } };
 }
 function closeTripPhase(state: TimerState, now: number, phase: Session['tripPhase'], expected: Session['tripPhase']): TimerState {
     if (!state.active || state.active.tripPhase !== expected) return state;
@@ -213,6 +217,9 @@ export function summarizeSession(session: Session, now: number): SessionSummary 
         studyMilliseconds,
         breakMilliseconds,
         trackedMilliseconds,
+        trackedActivityMilliseconds: studyMilliseconds + breakMilliseconds,
+        productiveMilliseconds: session.countsProductive === false ? 0 : studyMilliseconds,
+        personalMilliseconds: session.countsProductive === false ? studyMilliseconds : 0,
         travelMilliseconds,
         commitmentMilliseconds,
         studyShare: trackedMilliseconds > 0 ? studyMilliseconds / trackedMilliseconds * 100 : 0,

@@ -54,10 +54,10 @@ export function sessionChanges(before: Session | null, after: Session | null): P
   return changes;
 }
 type HabitRow = { user_id: string; id: string; name: string; goal_minutes: number; revision: number; deleted_at: string | null };
-type SessionRow = { user_id: string; id: string; name: string; started_at: string; ended_at: string | null; revision: number; deleted_at: string | null; entry_type?: 'timer' | 'manual_range'; activity_id?: string | null; note?: string | null; trip_phase?: Session['tripPhase'] | null; destination?: string | null; return_destination?: string | null };
-type ManualDurationRow = { user_id: string; id: string; name: string; local_date: string; duration_milliseconds: number; activity_id: string | null; note: string; revision: number; deleted_at: string | null };
+type SessionRow = { user_id: string; id: string; name: string; started_at: string; ended_at: string | null; revision: number; deleted_at: string | null; entry_type?: 'timer' | 'manual_range'; activity_id?: string | null; note?: string | null; trip_phase?: Session['tripPhase'] | null; destination?: string | null; return_destination?: string | null; counts_productive?: boolean };
+type ManualDurationRow = { user_id: string; id: string; name: string; local_date: string; duration_milliseconds: number; activity_id: string | null; note: string; revision: number; deleted_at: string | null; counts_productive?: boolean };
 type SegmentRow = { user_id: string; session_id: string; position: number; kind: Session['segments'][number]['kind']; started_at: string; ended_at: string | null };
-type ActivityRow = { user_id: string; id: string; name: string; icon: string; color: string; revision: number; deleted_at: string | null };
+type ActivityRow = { user_id: string; id: string; name: string; icon: string; color: string; category?: string | null; counts_productive?: boolean; revision: number; deleted_at: string | null };
 type ProfileRow = { user_id: string; display_name: string; revision: number };
 type ReminderRow = { user_id: string; habit_id: string; enabled: boolean; local_time: string; time_zone: string; weekday_mask: number; skip_if_goal_complete: boolean; revision: number; deleted_at: string | null };
 type SetRow = { user_id: string; id: string; session_id: string; description: string; segments: { startedAt: number; endedAt: number | null }[]; revision: number; deleted_at: string | null };
@@ -71,7 +71,7 @@ export function mapRows(userId: string, habits: HabitRow[], sessions: SessionRow
   }
   for (const row of activities) {
     revisions[revisionKey('activity', row.id)] = row.revision;
-    if (!row.deleted_at) state.activities.push({ id: row.id, name: row.name, icon: row.icon, color: row.color });
+    if (!row.deleted_at) state.activities.push({ id: row.id, name: row.name, icon: row.icon, color: row.color, category: row.category ?? null, countsProductive: row.counts_productive !== false });
   }
   const profile = profiles[0];
   if (profile) {
@@ -86,7 +86,7 @@ export function mapRows(userId: string, habits: HabitRow[], sessions: SessionRow
     if (!parts.length) throw new Error('A cloud session is missing its segments');
     const session: Session = { id: row.id, name: row.name, startedAt: Date.parse(row.started_at), endedAt: row.ended_at ? Date.parse(row.ended_at) : null,
       segments: parts.map(part => ({ kind: part.kind, startedAt: Date.parse(part.started_at), endedAt: part.ended_at ? Date.parse(part.ended_at) : null })),
-      entryType, localDate: null, durationMilliseconds: null, activityId: row.activity_id ?? null, note: row.note ?? '', sets: [],
+      entryType, localDate: null, durationMilliseconds: null, activityId: row.activity_id ?? null, note: row.note ?? '', sets: [], countsProductive: row.counts_productive !== false,
       ...(row.trip_phase ? { tripPhase: row.trip_phase, destination: row.destination ?? '', returnDestination: row.return_destination ?? '' } : {}) };
     if (entryType === 'timer' && session.endedAt === null) {
       if (state.active) throw new Error('Multiple active cloud sessions');
@@ -99,7 +99,7 @@ export function mapRows(userId: string, habits: HabitRow[], sessions: SessionRow
     if (row.deleted_at) continue;
     state.completed.push({ id: row.id, name: row.name, startedAt: null, endedAt: null, segments: [],
       entryType: 'manual_duration', localDate: row.local_date, durationMilliseconds: Number(row.duration_milliseconds),
-      activityId: row.activity_id, note: row.note });
+      activityId: row.activity_id, note: row.note, countsProductive: row.counts_productive !== false });
   }
   for (const row of reminders) {
     revisions[revisionKey('reminder', row.habit_id)] = row.revision;

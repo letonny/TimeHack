@@ -14,7 +14,7 @@ test('empty periods and hourly buckets show zero actual activity', () => {
   const now = at(2026, 10, 30, 12);
   const state = emptyState();
   const dayKey = localDayKey(now);
-  assert.deepEqual(periodSummary(state, now, [dayKey]), { trackedMilliseconds: 0, productiveMilliseconds: 0, sessionCount: 0, goalsCompleted: 0 });
+  assert.deepEqual(periodSummary(state, now, [dayKey]), { trackedMilliseconds: 0, productiveMilliseconds: 0, personalMilliseconds: 0, travelMilliseconds: 0, sessionCount: 0, goalsCompleted: 0 });
   assert.ok(dayActivityBuckets(state, now, dayKey).every(bucket => bucket.productiveMilliseconds === 0 && bucket.breakMilliseconds === 0));
   assert.deepEqual(productiveTrend(state, now, [dayKey]), [{ dayKey, milliseconds: 0, future: false }]);
 });

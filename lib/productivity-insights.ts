@@ -4,9 +4,9 @@ import { duration, isDurationOnly, type Habit, type Session, type TimerState } f
 
 export type InsightsRange = { startDay: string; endDay: string };
 export type InsightsPreset = 7 | 30 | 90;
-export type InsightsDay = { dayKey: string; productiveMilliseconds: number; breakMilliseconds: number; untimedMilliseconds: number };
+export type InsightsDay = { dayKey: string; productiveMilliseconds: number; personalMilliseconds: number; breakMilliseconds: number; untimedMilliseconds: number };
 export type InsightsActivity = {
-  key: string; name: string; productiveMilliseconds: number; share: number;
+  key: string; name: string; productiveMilliseconds: number; personalMilliseconds: number; share: number;
   completedSessions: number; averageCompletedSessionMilliseconds: number;
 };
 export type InsightsHabit = {
@@ -27,7 +27,7 @@ export type InsightsPattern = {
 };
 export type InsightsReport = {
   range: InsightsRange; dayCount: number; days: InsightsDay[];
-  summary: { trackedMilliseconds: number; productiveMilliseconds: number; breakMilliseconds: number; completedSessions: number; averageDailyProductiveMilliseconds: number };
+  summary: { trackedMilliseconds: number; productiveMilliseconds: number; personalMilliseconds: number; travelMilliseconds: number; breakMilliseconds: number; completedSessions: number; averageDailyProductiveMilliseconds: number };
   previousProductiveMilliseconds: number;
   comparison: { differenceMilliseconds: number; percentChange: number | null };
   trend: { startDay: string; endDay: string; productiveMilliseconds: number }[];
@@ -82,9 +82,10 @@ function dayTotals(state: TimerState, now: number, keys: string[]): InsightsDay[
     const timeline = buildDayTimeline(state, now, dayKey, { includeBreaks: true });
     return {
       dayKey,
-      productiveMilliseconds: timeline.activityMilliseconds + timeline.unscheduledMilliseconds,
+      productiveMilliseconds: timeline.productiveMilliseconds,
+      personalMilliseconds: timeline.personalMilliseconds,
       breakMilliseconds: timeline.breakMilliseconds,
-      untimedMilliseconds: timeline.unscheduledMilliseconds,
+      untimedMilliseconds: timeline.unscheduledProductiveMilliseconds,
     };
   });
 }
@@ -107,6 +108,7 @@ export function analyzeInsights(state: TimerState, now: number, range: InsightsR
   const days = dayTotals(relevant, now, keys);
   const previousDays = dayTotals(relevant, now, insightsDayKeys({ startDay: previousStart, endDay: previousEnd }));
   const productiveMilliseconds = days.reduce((sum, day) => sum + day.productiveMilliseconds, 0);
+  const personalMilliseconds = days.reduce((sum, day) => sum + day.personalMilliseconds, 0);
   const breakMilliseconds = days.reduce((sum, day) => sum + day.breakMilliseconds, 0);
   const previousProductiveMilliseconds = previousDays.reduce((sum, day) => sum + day.productiveMilliseconds, 0);
   const completed = relevant.completed.filter(session => {
@@ -114,15 +116,15 @@ export function analyzeInsights(state: TimerState, now: number, range: InsightsR
     return day !== null && day >= range.startDay && day <= range.endDay;
   });
   const summary = {
-    trackedMilliseconds: productiveMilliseconds + breakMilliseconds,
-    productiveMilliseconds, breakMilliseconds, completedSessions: completed.length,
+    trackedMilliseconds: productiveMilliseconds + personalMilliseconds + breakMilliseconds,
+    productiveMilliseconds, personalMilliseconds, travelMilliseconds: keys.reduce((sum, key) => sum + buildDayTimeline(relevant, now, key, { includeBreaks: true }).travelMilliseconds, 0), breakMilliseconds, completedSessions: completed.length,
     averageDailyProductiveMilliseconds: productiveMilliseconds / keys.length,
   };
-  const activityMap = new Map<string, { name: string; milliseconds: number; completedSessions: number; completedMilliseconds: number }>();
+  const activityMap = new Map<string, { name: string; milliseconds: number; personalMilliseconds: number; completedSessions: number; completedMilliseconds: number }>();
   const ensureActivity = (name: string) => {
     const key = activityKey(name);
     let value = activityMap.get(key);
-    if (!value) { value = { name, milliseconds: 0, completedSessions: 0, completedMilliseconds: 0 }; activityMap.set(key, value); }
+    if (!value) { value = { name, milliseconds: 0, personalMilliseconds: 0, completedSessions: 0, completedMilliseconds: 0 }; activityMap.set(key, value); }
     return value;
   };
   const hourPattern: InsightsPattern['timeOfDay'] = [
@@ -135,13 +137,19 @@ export function analyzeInsights(state: TimerState, now: number, range: InsightsR
     const limits = [0, 6, 12, 18, 24].map(hour => new Date(base.getFullYear(), base.getMonth(), base.getDate() + (hour === 24 ? 1 : 0), hour === 24 ? 0 : hour).getTime());
     for (const slice of timeline.slices) {
       if (slice.category !== 'activity') continue;
-      ensureActivity(slice.name).milliseconds += slice.milliseconds;
-      for (let index = 0; index < 4; index += 1) hourPattern[index].milliseconds += Math.max(0, Math.min(slice.endedAt, limits[index + 1]) - Math.max(slice.startedAt, limits[index]));
+      const item = ensureActivity(slice.name);
+      if (slice.countsProductive === false) item.personalMilliseconds += slice.milliseconds;
+      else {
+        item.milliseconds += slice.milliseconds;
+        for (let index = 0; index < 4; index += 1) hourPattern[index].milliseconds += Math.max(0, Math.min(slice.endedAt, limits[index + 1]) - Math.max(slice.startedAt, limits[index]));
+      }
     }
   }
   for (const session of relevant.completed) {
     if (isDurationOnly(session) && session.localDate && session.localDate >= range.startDay && session.localDate <= range.endDay) {
-      ensureActivity(session.name).milliseconds += Math.max(0, session.durationMilliseconds ?? 0);
+      const item = ensureActivity(session.name);
+      if (session.countsProductive === false) item.personalMilliseconds += Math.max(0, session.durationMilliseconds ?? 0);
+      else item.milliseconds += Math.max(0, session.durationMilliseconds ?? 0);
     }
   }
   for (const session of completed) {
@@ -150,12 +158,12 @@ export function analyzeInsights(state: TimerState, now: number, range: InsightsR
     item.completedMilliseconds += duration(session, session.endedAt ?? now);
   }
   const activities = [...activityMap].map(([key, item]) => ({
-    key, name: item.name, productiveMilliseconds: item.milliseconds,
-    share: productiveMilliseconds > 0 ? item.milliseconds / productiveMilliseconds : 0,
+    key, name: item.name, productiveMilliseconds: item.milliseconds, personalMilliseconds: item.personalMilliseconds,
+    share: productiveMilliseconds + personalMilliseconds > 0 ? (item.milliseconds + item.personalMilliseconds) / (productiveMilliseconds + personalMilliseconds) : 0,
     completedSessions: item.completedSessions,
     averageCompletedSessionMilliseconds: item.completedSessions ? item.completedMilliseconds / item.completedSessions : 0,
-  })).filter(item => item.productiveMilliseconds > 0 || item.completedSessions > 0)
-    .sort((a, b) => b.productiveMilliseconds - a.productiveMilliseconds || a.name.localeCompare(b.name));
+  })).filter(item => item.productiveMilliseconds > 0 || item.personalMilliseconds > 0 || item.completedSessions > 0)
+    .sort((a, b) => (b.productiveMilliseconds + b.personalMilliseconds) - (a.productiveMilliseconds + a.personalMilliseconds) || a.name.localeCompare(b.name));
   const today = localDayKey(now);
   const habits = state.habits.map(habit => {
     const key = activityKey(habit.name);
@@ -209,10 +217,10 @@ export function analyzeInsights(state: TimerState, now: number, range: InsightsR
   }
   if (strongestDay && strongestDay.days >= 2) observations.push('Your highest average weekday in this range was '
     + new Date(localDayStart(keys.find(key => new Date(localDayStart(key)).getDay() === strongestDay.weekday)!)).toLocaleDateString('en-US', { weekday: 'long' }) + '.');
-  if (activities[0]?.share >= .25 && activities[0].productiveMilliseconds >= 60 * 60_000) observations.push(
-    activities[0].name + ' accounted for ' + Math.round(activities[0].share * 100) + '% of productive time in this range.');
+  if (activities[0]?.share >= .25 && activities[0].productiveMilliseconds + activities[0].personalMilliseconds >= 60 * 60_000) observations.push(
+    activities[0].name + ' accounted for ' + Math.round(activities[0].share * 100) + '% of active time in this range.');
   if (completed.length >= 3) observations.push('Completed sessions averaged '
-    + Math.round(patterns.averageCompletedSessionMilliseconds / 60_000) + ' productive minutes.');
+    + Math.round(patterns.averageCompletedSessionMilliseconds / 60_000) + ' active minutes.');
   return {
     range, dayCount: keys.length, days, summary, previousProductiveMilliseconds,
     comparison: { differenceMilliseconds: productiveMilliseconds - previousProductiveMilliseconds, percentChange: previousProductiveMilliseconds ? (productiveMilliseconds - previousProductiveMilliseconds) / previousProductiveMilliseconds * 100 : null },
