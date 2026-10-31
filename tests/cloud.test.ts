@@ -2,7 +2,21 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { canOfferImport, cloudKey, LEGACY_CLAIM_KEY, mapRows, newCache, nextChange, readCache, revisionKey, writeCache } from '../lib/cloud.ts';
+import { canOfferImport, cloudKey, LEGACY_CLAIM_KEY, mapRows, newCache, nextChange, readCache, revisionKey, sameCache, writeCache } from '../lib/cloud.ts';
+
+test('cache comparison ignores hydration field order but detects pending and revision changes', () => {
+  const original = newCache('alice');
+  original.state.completed = [{ id: 's', name: 'Study', startedAt: 1, endedAt: 2, segments: [{ kind: 'study', startedAt: 1, endedAt: 2 }], entryType: 'timer', sets: [] }];
+  const values = new Map<string, string>();
+  writeCache({ setItem: (key, value) => { values.set(key, value); } }, original);
+  const hydrated = readCache({ getItem: key => values.get(key) ?? null }, 'alice')!;
+  assert.equal(JSON.stringify(hydrated) === JSON.stringify(original), false);
+  assert.equal(sameCache(hydrated, original), true);
+  const reordered = { ...original, state: { ...original.state, completed: original.state.completed.map(session => ({ entryType: session.entryType, ...session })) } };
+  assert.equal(sameCache(reordered, original), true);
+  assert.equal(sameCache({ ...original, revisions: { 'session:s': 2 } }, original), false);
+  assert.equal(sameCache({ ...original, queue: [{ eventId: 'e' } as never] }, original), false);
+});
 import { duration, emptyState, todaySummary } from '../lib/timer.ts';
 import { loadState, saveState, STORAGE_KEY } from '../lib/storage.ts';
 

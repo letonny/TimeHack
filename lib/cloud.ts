@@ -30,6 +30,18 @@ export function readCache(storage: Pick<Storage, 'getItem'>, userId: string): Cl
 export function writeCache(storage: Pick<Storage, 'setItem'>, cache: CloudCache) {
   storage.setItem(cloudKey(cache.userId), JSON.stringify(cache));
 }
+/** Compare cache contents, not object insertion order changed by hydration. */
+export function sameCache(left: CloudCache, right: CloudCache): boolean {
+  const canonical = (value: unknown): unknown => {
+    if (Array.isArray(value)) return value.map(canonical);
+    if (value && typeof value === 'object') return Object.fromEntries(
+      Object.entries(value).filter(([, item]) => item !== undefined).sort(([a], [b]) => a.localeCompare(b))
+        .map(([key, item]) => [key, canonical(item)]));
+    return value;
+  };
+  const hydrated = (cache: CloudCache) => readCache({ getItem: () => JSON.stringify(cache) }, cache.userId);
+  return JSON.stringify(canonical(hydrated(left))) === JSON.stringify(canonical(hydrated(right)));
+}
 export function nextChange(cache: CloudCache, entityType: Change['entityType'], entityId: string, action: Change['action'], payload: Change['payload'], operation?: Change['operation']): Change {
   const key = revisionKey(entityType, entityId);
   return { eventId: crypto.randomUUID(), entityType, entityId, action,

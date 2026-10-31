@@ -10,7 +10,7 @@ import { removeCompletedSession, replaceCompletedSession } from '@/lib/session-a
 import { loadState, STORAGE_KEY } from '@/lib/storage';
 import { createClient } from '@/lib/supabase/client';
 import { applyChange, fetchCloud, SyncError } from '@/lib/cloud-repository';
-import { canOfferImport, cloudKey, LEGACY_CLAIM_KEY, newCache, nextChange, readCache, revisionKey, writeCache, type Change, type CloudCache } from '@/lib/cloud';
+import { canOfferImport, cloudKey, LEGACY_CLAIM_KEY, newCache, nextChange, readCache, revisionKey, sameCache, writeCache, type Change, type CloudCache } from '@/lib/cloud';
 import { correctionAvailability, validateIntervalCorrection, type IntervalCorrection } from '@/lib/session-corrections';
 
 /** Sanitized user-facing label for a sync error, with no server internals. */
@@ -178,7 +178,7 @@ export function useTimer() {
     if (!ready || !cache || conflictRef.current || correctionRef.current || cache.userId !== userRef.current) return false;
     try {
       const stored = readCache(window.localStorage, cache.userId);
-      if (stored && JSON.stringify(stored) !== JSON.stringify(cache)) {
+      if (stored && !sameCache(stored, cache)) {
         cacheRef.current = stored; setState(stored.state); setPending(stored.queue.length); setRevisions(stored.revisions);
         setError('Another tab changed this account. The latest saved data is loaded; please try your action again.');
         return false;
@@ -288,7 +288,10 @@ export function useTimer() {
     busyRef.current = true; correctionRef.current = true; setSyncing(true);
     try {
       const stored = readCache(window.localStorage, userId);
-      if (stored && JSON.stringify(stored) !== JSON.stringify(cache)) throw new Error('Another tab changed this account. Reload and retry.');
+      if (stored && !sameCache(stored, cache)) {
+        cacheRef.current = stored; setState(stored.state); setPending(stored.queue.length); setRevisions(stored.revisions);
+        throw new Error('Another tab changed this account. The latest locally saved data is loaded. Sync pending changes, then retry the correction.');
+      }
       const remote = await fetchCloud(client, userId);
       const revision = cache.revisions[revisionKey('session', sessionId)];
       if (!revision || (!retryingEvent && (remote.revisions[revisionKey('session', sessionId)] !== revision
