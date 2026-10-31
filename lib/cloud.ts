@@ -54,9 +54,9 @@ export function sessionChanges(before: Session | null, after: Session | null): P
   return changes;
 }
 type HabitRow = { user_id: string; id: string; name: string; goal_minutes: number; revision: number; deleted_at: string | null };
-type SessionRow = { user_id: string; id: string; name: string; started_at: string; ended_at: string | null; revision: number; deleted_at: string | null; entry_type?: 'timer' | 'manual_range'; activity_id?: string | null; note?: string | null };
+type SessionRow = { user_id: string; id: string; name: string; started_at: string; ended_at: string | null; revision: number; deleted_at: string | null; entry_type?: 'timer' | 'manual_range'; activity_id?: string | null; note?: string | null; trip_phase?: Session['tripPhase'] | null; destination?: string | null; return_destination?: string | null };
 type ManualDurationRow = { user_id: string; id: string; name: string; local_date: string; duration_milliseconds: number; activity_id: string | null; note: string; revision: number; deleted_at: string | null };
-type SegmentRow = { user_id: string; session_id: string; position: number; kind: 'study' | 'break'; started_at: string; ended_at: string | null };
+type SegmentRow = { user_id: string; session_id: string; position: number; kind: Session['segments'][number]['kind']; started_at: string; ended_at: string | null };
 type ActivityRow = { user_id: string; id: string; name: string; icon: string; color: string; revision: number; deleted_at: string | null };
 type ProfileRow = { user_id: string; display_name: string; revision: number };
 type ReminderRow = { user_id: string; habit_id: string; enabled: boolean; local_time: string; time_zone: string; weekday_mask: number; skip_if_goal_complete: boolean; revision: number; deleted_at: string | null };
@@ -86,7 +86,8 @@ export function mapRows(userId: string, habits: HabitRow[], sessions: SessionRow
     if (!parts.length) throw new Error('A cloud session is missing its segments');
     const session: Session = { id: row.id, name: row.name, startedAt: Date.parse(row.started_at), endedAt: row.ended_at ? Date.parse(row.ended_at) : null,
       segments: parts.map(part => ({ kind: part.kind, startedAt: Date.parse(part.started_at), endedAt: part.ended_at ? Date.parse(part.ended_at) : null })),
-      entryType, localDate: null, durationMilliseconds: null, activityId: row.activity_id ?? null, note: row.note ?? '', sets: [] };
+      entryType, localDate: null, durationMilliseconds: null, activityId: row.activity_id ?? null, note: row.note ?? '', sets: [],
+      ...(row.trip_phase ? { tripPhase: row.trip_phase, destination: row.destination ?? '', returnDestination: row.return_destination ?? '' } : {}) };
     if (entryType === 'timer' && session.endedAt === null) {
       if (state.active) throw new Error('Multiple active cloud sessions');
       state.active = session;

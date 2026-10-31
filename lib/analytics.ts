@@ -11,7 +11,7 @@ export type GoalProgress = {
   visualPercentage: number;
   remainingMinutes: number;
 };
-export type DayTimelineCategory = 'activity' | 'break' | 'untracked' | 'remaining';
+export type DayTimelineCategory = 'activity' | 'break' | 'travel' | 'untracked' | 'remaining';
 export type DayTimelineSlice = {
   id: string;
   category: DayTimelineCategory;
@@ -30,6 +30,7 @@ export type DayTimeline = {
   slices: DayTimelineSlice[];
   activityMilliseconds: number;
   breakMilliseconds: number;
+  travelMilliseconds: number;
   trackedMilliseconds: number;
   unscheduledMilliseconds: number;
   untrackedMilliseconds: number;
@@ -65,7 +66,7 @@ function sessions(state: TimerState): Session[] {
 }
 
 type TimelineCandidate = {
-  category: 'activity' | 'break'; name: string; sessionId: string;
+  category: 'activity' | 'break' | 'travel'; name: string; sessionId: string;
   startedAt: number; endedAt: number; sourceStartedAt: number;
 };
 
@@ -85,13 +86,13 @@ export function buildDayTimeline(
   for (const session of sessions(state)) {
     if (filter && activityKey(session.name) !== filter) continue;
     for (const segment of session.segments) {
-      if (segment.kind === 'break' && !options.includeBreaks) continue;
+      if (segment.kind !== 'study' && !options.includeBreaks) continue;
       const startedAt = Math.max(segment.startedAt, dayStartedAt);
       const endedAt = Math.min(segment.endedAt ?? now, elapsedAt, dayEndedAt);
       if (endedAt <= startedAt) continue;
       candidates.push({
-        category: segment.kind === 'break' ? 'break' : 'activity',
-        name: segment.kind === 'break' ? 'Recorded breaks' : session.name,
+        category: segment.kind === 'study' ? 'activity' : segment.kind === 'break' ? 'break' : 'travel',
+        name: segment.kind === 'study' ? session.name : segment.kind === 'break' ? 'Recorded breaks' : segment.kind === 'travel_out' ? `Travel to ${session.destination || 'destination'}` : `Return trip${session.returnDestination ? ` to ${session.returnDestination}` : ''}`,
         sessionId: session.id,
         startedAt,
         endedAt,
@@ -116,7 +117,7 @@ export function buildDayTimeline(
       category = 'remaining'; name = 'Remaining today';
     } else {
       const covering = candidates.filter(candidate => candidate.startedAt <= startedAt && candidate.endedAt >= endedAt).sort((a, b) => {
-        if (a.category !== b.category) return a.category === 'activity' ? -1 : 1;
+        if (a.category !== b.category) return ({ activity: 0, travel: 1, break: 2 }[a.category] - { activity: 0, travel: 1, break: 2 }[b.category]);
         return b.sourceStartedAt - a.sourceStartedAt || b.sessionId.localeCompare(a.sessionId);
       });
       const chosen = covering[0];
@@ -139,7 +140,8 @@ export function buildDayTimeline(
     dayKey, dayStartedAt, dayEndedAt, dayMilliseconds: dayEndedAt - dayStartedAt, elapsedAt, slices,
     activityMilliseconds,
     breakMilliseconds,
-    trackedMilliseconds: activityMilliseconds + breakMilliseconds + unscheduledMilliseconds,
+    travelMilliseconds: sum('travel'),
+    trackedMilliseconds: activityMilliseconds + breakMilliseconds + sum('travel') + unscheduledMilliseconds,
     unscheduledMilliseconds,
     untrackedMilliseconds: sum('untracked'),
     remainingMilliseconds: sum('remaining'),
@@ -157,7 +159,7 @@ export function dailyActivity(state: TimerState, now: number, activity?: string)
       continue;
     }
     for (const segment of session.segments) {
-      if (segment.kind === 'break') continue;
+      if (segment.kind !== 'study') continue;
       const endedAt = Math.min(segment.endedAt ?? now, now);
       if (endedAt <= segment.startedAt) continue;
       let dayKey = localDayKey(segment.startedAt);

@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { emptyState, endSet, pause, resume, start, startSet, stop, type Activity, type Habit, type HabitReminder, type Profile, type Session, type TimerState } from '@/lib/timer';
+import { arrive, completeTrip, emptyState, endSet, finishActivity, finishWithoutReturnTrip, pause, resume, start, startReturnTrip, startSet, startTrip, startTripActivity, stop, type Activity, type Habit, type HabitReminder, type Profile, type Session, type TimerState } from '@/lib/timer';
 import { saveHabit } from '@/lib/habits';
 import { activityForName, saveActivity } from '@/lib/activity-metadata';
 import { validateDisplayName } from '@/lib/personalization';
@@ -201,13 +201,16 @@ export function useTimer() {
     const changes: Pick<Change, 'entityType' | 'entityId' | 'action' | 'payload' | 'operation'>[] = [];
     const parentBefore = before && { ...before, sets: undefined };
     const parentAfter = { ...after, sets: undefined };
+    const changedSets = (after.sets ?? []).filter(item => {
+      const old = before?.sets?.find(previous => previous.id === item.id);
+      return !old || JSON.stringify(old) !== JSON.stringify(item);
+    });
+    for (const item of changedSets.filter(item => before?.sets?.some(old => old.id === item.id)))
+      changes.push({ entityType: 'set', entityId: item.id, action: 'save', payload: item });
     if (!before || JSON.stringify(parentBefore) !== JSON.stringify(parentAfter))
       changes.push({ entityType: 'session', entityId: after.id, action: 'save', payload: after });
-    for (const item of after.sets ?? []) {
-      const old = before?.sets?.find(previous => previous.id === item.id);
-      if (!old || JSON.stringify(old) !== JSON.stringify(item))
-        changes.push({ entityType: 'set', entityId: item.id, action: 'save', payload: item });
-    }
+    for (const item of changedSets.filter(item => !before?.sets?.some(old => old.id === item.id)))
+      changes.push({ entityType: 'set', entityId: item.id, action: 'save', payload: item });
     return changes;
   }
   function sessionUpdate(transform: (state: TimerState, time: number) => TimerState, createdId?: string) {
@@ -269,6 +272,11 @@ export function useTimer() {
     retry: () => { if (!userRef.current) window.location.reload(); else { conflictRef.current = false; setConflict(false); void syncRef.current(); } },
     previewLegacy, importLegacy, useCloudVersion,
     start: (name: string) => { const id = crypto.randomUUID(); return sessionUpdate((current, time) => { const activity = activityForName(current, name); return start(current, name, time, id, activity.id || null); }, id); },
+    startTrip: (name: string, destination = '', returnDestination = '') => { const id = crypto.randomUUID(); return sessionUpdate((current, time) => { const activity = activityForName(current, name); return startTrip(current, name, time, id, activity.id || null, destination, returnDestination); }, id); },
+    arrive: () => sessionUpdate(arrive), startTripActivity: () => sessionUpdate(startTripActivity),
+    finishActivity: () => sessionUpdate(finishActivity), startReturnTrip: () => sessionUpdate(startReturnTrip),
+    completeTrip: (note = '') => sessionUpdate((current, time) => { const next = completeTrip(current, time); return next === current ? next : { ...next, completed: [{ ...next.completed[0], note: note.trim().slice(0, 2000) }, ...next.completed.slice(1)] }; }),
+    finishWithoutReturnTrip: (note = '') => sessionUpdate((current, time) => { const next = finishWithoutReturnTrip(current, time); return next === current ? next : { ...next, completed: [{ ...next.completed[0], note: note.trim().slice(0, 2000) }, ...next.completed.slice(1)] }; }),
     set: (description = 'SET', expectedActiveSetId: string | null = null) => { const id = crypto.randomUUID(); return sessionUpdate((current, time) => startSet(current, time, id, description, expectedActiveSetId)); },
     endSet: () => sessionUpdate(endSet), pause: () => sessionUpdate(pause), resume: () => sessionUpdate(resume),
     stop: (note = '') => sessionUpdate((current, time) => { const next = stop(current, time); if (next === current || !next.completed[0]) return next; return { ...next, completed: [{ ...next.completed[0], note: note.trim().slice(0, 2000) }, ...next.completed.slice(1)] }; }),

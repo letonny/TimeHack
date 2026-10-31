@@ -1,5 +1,5 @@
 export type Segment = {
-    kind: 'study' | 'break';
+    kind: 'study' | 'break' | 'travel_out' | 'travel_return';
     startedAt: number;
     endedAt: number | null;
 };
@@ -16,6 +16,9 @@ export type Session = {
     durationMilliseconds?: number | null;
     activityId?: string | null;
     note?: string;
+    tripPhase?: 'outbound' | 'arrived' | 'activity' | 'activity_finished' | 'return';
+    destination?: string;
+    returnDestination?: string;
 };
 export type Activity = { id: string; name: string; icon: string; color: string };
 export type Profile = { displayName: string };
@@ -48,6 +51,8 @@ export type SessionSummary = {
     studyMilliseconds: number;
     breakMilliseconds: number;
     trackedMilliseconds: number;
+    travelMilliseconds: number;
+    commitmentMilliseconds: number;
     studyShare: number;
     breakCount: number;
     intervals: SessionInterval[];
@@ -58,7 +63,7 @@ export function isDurationOnly(session: Session): boolean {
 }
 export function duration(session: Session, now: number): number {
     if (isDurationOnly(session)) return session.durationMilliseconds ?? 0;
-    return session.segments.reduce((total, segment) => total + (segment.kind === 'break' ? 0 : segmentDuration(segment, now)), 0);
+    return session.segments.reduce((total, segment) => total + (segment.kind === 'study' ? segmentDuration(segment, now) : 0), 0);
 }
 export function durationByKind(session: Session, now: number, kind: Segment['kind']): number {
     if (isDurationOnly(session)) return kind === 'study' ? session.durationMilliseconds ?? 0 : 0;
@@ -79,7 +84,7 @@ export function setDuration(item: SessionSet, now: number): number {
 }
 export function startSet(state: TimerState, now: number, id: string, description: string, expectedActiveSetId?: string | null): TimerState {
     const session = state.active;
-    if (!session || !isRunning(session)) return state;
+    if (!session || !isRunning(session) || (session.tripPhase && session.tripPhase !== 'activity')) return state;
     if (expectedActiveSetId !== undefined && (activeSet(session)?.id ?? null) !== expectedActiveSetId) return state;
     const parent = session.segments.at(-1)?.kind === 'break' ? setSegment(state, now).active! : session;
     const label = description.trim().slice(0, 120) || 'SET';
@@ -100,6 +105,35 @@ export function start(state: TimerState, name: string, now: number, id: string, 
         return state;
     return { ...state, active: { id, name: name.trim(), startedAt: now, endedAt: null, segments: [{ kind: 'study', startedAt: now, endedAt: null }], sets: [], entryType: 'timer', localDate: null, durationMilliseconds: null, activityId, note: '' } };
 }
+export function startTrip(state: TimerState, name: string, now: number, id: string, activityId: string | null = null, destination = '', returnDestination = ''): TimerState {
+    if (state.active || !name.trim()) return state;
+    return { ...state, active: { id, name: name.trim(), startedAt: now, endedAt: null,
+        segments: [{ kind: 'travel_out', startedAt: now, endedAt: null }], sets: [], entryType: 'timer',
+        localDate: null, durationMilliseconds: null, activityId, note: '', tripPhase: 'outbound',
+        destination: destination.trim().slice(0, 120), returnDestination: returnDestination.trim().slice(0, 120) } };
+}
+function closeTripPhase(state: TimerState, now: number, phase: Session['tripPhase'], expected: Session['tripPhase']): TimerState {
+    if (!state.active || state.active.tripPhase !== expected) return state;
+    const closed = isRunning(state.active) ? pause(state, now).active! : state.active;
+    return { ...state, active: { ...closed, tripPhase: phase } };
+}
+export function arrive(state: TimerState, now: number): TimerState { return closeTripPhase(state, now, 'arrived', 'outbound'); }
+export function finishActivity(state: TimerState, now: number): TimerState { return closeTripPhase(state, now, 'activity_finished', 'activity'); }
+function beginTripPhase(state: TimerState, now: number, expected: Session['tripPhase'], phase: Session['tripPhase'], kind: Segment['kind']): TimerState {
+    const session = state.active;
+    if (!session || session.tripPhase !== expected || isRunning(session)) return state;
+    const lastEnd = session.segments.at(-1)!.endedAt!;
+    return { ...state, active: { ...session, tripPhase: phase,
+        segments: [...session.segments, { kind, startedAt: Math.max(now, lastEnd), endedAt: null }] } };
+}
+export function startTripActivity(state: TimerState, now: number): TimerState { return beginTripPhase(state, now, 'arrived', 'activity', 'study'); }
+export function startReturnTrip(state: TimerState, now: number): TimerState { return beginTripPhase(state, now, 'activity_finished', 'return', 'travel_return'); }
+export function completeTrip(state: TimerState, now: number): TimerState {
+    return state.active?.tripPhase === 'return' ? stop(state, now) : state;
+}
+export function finishWithoutReturnTrip(state: TimerState, now: number): TimerState {
+    return state.active?.tripPhase === 'activity_finished' ? stop(state, now) : state;
+}
 export function pause(state: TimerState, now: number): TimerState {
     if (!state.active || !isRunning(state.active))
         return state;
@@ -109,10 +143,12 @@ export function pause(state: TimerState, now: number): TimerState {
 export function resume(state: TimerState, now: number): TimerState {
     if (!state.active || isRunning(state.active))
         return state;
+    if (state.active.tripPhase === 'arrived' || state.active.tripPhase === 'activity_finished') return state;
     const lastEnd = state.active.segments.at(-1)!.endedAt!;
     return { ...state, active: { ...state.active, segments: [...state.active.segments, { kind: state.active.segments.at(-1)!.kind, startedAt: Math.max(now, lastEnd), endedAt: null }] } };
 }
 export function stop(state: TimerState, now: number): TimerState {
+    if (state.active?.tripPhase && state.active.tripPhase !== 'return' && state.active.tripPhase !== 'activity_finished') return state;
     const closed = pause(state, now).active;
     if (!closed)
         return state;
@@ -127,7 +163,7 @@ export function todaySummary(state: TimerState, now: number) {
     const dayKey = `${dayStart.getFullYear()}-${String(dayStart.getMonth() + 1).padStart(2, '0')}-${String(dayStart.getDate()).padStart(2, '0')}`;
     const milliseconds = sessions.reduce((total, session) => total + (isDurationOnly(session)
         ? session.localDate === dayKey ? session.durationMilliseconds ?? 0 : 0
-        : session.segments.reduce((sum, segment) => sum + (segment.kind === 'break' ? 0 : Math.max(0, Math.min(segment.endedAt ?? now, dayEnd.getTime(), now) - Math.max(segment.startedAt, dayStart.getTime()))), 0)), 0);
+        : session.segments.reduce((sum, segment) => sum + (segment.kind === 'study' ? Math.max(0, Math.min(segment.endedAt ?? now, dayEnd.getTime(), now) - Math.max(segment.startedAt, dayStart.getTime())) : 0), 0)), 0);
     return { milliseconds, count: state.completed.filter(session => isDurationOnly(session) ? session.localDate === dayKey : session.endedAt! >= dayStart.getTime() && session.endedAt! < dayEnd.getTime()).length };
 }
 export function formatDuration(ms: number): string {
@@ -169,12 +205,16 @@ export function sessionIntervals(session: Session, now: number): SessionInterval
 export function summarizeSession(session: Session, now: number): SessionSummary {
     const studyMilliseconds = durationByKind(session, now, 'study');
     const breakMilliseconds = durationByKind(session, now, 'break');
-    const trackedMilliseconds = studyMilliseconds + breakMilliseconds;
+    const trackedMilliseconds = trackedDuration(session, now);
+    const travelMilliseconds = durationByKind(session, now, 'travel_out') + durationByKind(session, now, 'travel_return');
+    const commitmentMilliseconds = isDurationOnly(session) ? trackedMilliseconds : Math.max(0, (session.endedAt ?? now) - (session.startedAt ?? now));
     const intervals = sessionIntervals(session, now);
     return {
         studyMilliseconds,
         breakMilliseconds,
         trackedMilliseconds,
+        travelMilliseconds,
+        commitmentMilliseconds,
         studyShare: trackedMilliseconds > 0 ? studyMilliseconds / trackedMilliseconds * 100 : 0,
         breakCount: intervals.filter(interval => interval.kind === 'break').length,
         intervals,
@@ -185,7 +225,7 @@ export function segmentDuration(segment: Segment, now: number): number {
     return Math.max(0, (segment.endedAt ?? now) - segment.startedAt);
 }
 export function setSegment(state: TimerState, now: number): TimerState {
-    if (!state.active || !isRunning(state.active)) return state;
+    if (!state.active || !isRunning(state.active) || (state.active.tripPhase && state.active.tripPhase !== 'activity')) return state;
     const closed = pause(state, now).active!;
     const last = closed.segments.at(-1)!;
     return { ...state, active: { ...closed, segments: [...closed.segments, {

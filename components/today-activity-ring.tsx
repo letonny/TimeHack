@@ -7,7 +7,7 @@ import { ringArc } from '@/lib/ring-geometry';
 import type { TimerState } from '@/lib/timer';
 
 const categoryColors: Record<Exclude<DayTimelineCategory, 'activity'>, string> = {
-  break: '#ffd06d', untracked: '#293c55', remaining: '#293c55',
+  break: '#ffd06d', travel: '#7dd3fc', untracked: '#293c55', remaining: '#293c55',
 };
 const compactDuration = (milliseconds: number) => {
   const totalSeconds = Math.floor(milliseconds / 1000);
@@ -37,7 +37,7 @@ export function TodayActivityRing({ state, now, dayKey = localDayKey(now), onOpe
   };
   const selected = timeline.slices.find(slice => slice.id === (hoveredId ?? selectedId)) ?? null;
   const radii = [43, 35, 27];
-  const hasTimedActivity = timeline.activityMilliseconds > 0 || timeline.breakMilliseconds > 0;
+  const hasTimedActivity = timeline.activityMilliseconds > 0 || timeline.breakMilliseconds > 0 || timeline.travelMilliseconds > 0;
   const hasActivity = hasTimedActivity || timeline.unscheduledMilliseconds > 0;
   const isToday = dayKey === localDayKey(now);
   const dayLabel = new Date(localDayStart(dayKey)).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
@@ -64,8 +64,8 @@ export function TodayActivityRing({ state, now, dayKey = localDayKey(now), onOpe
           <svg viewBox="0 0 100 100" className="size-full" aria-label={`${dayLabel} ${compactDuration(timeline.dayMilliseconds)} local-day activity ring. ${compactDuration(timeline.trackedMilliseconds)} total tracked time.`}>
             <defs><linearGradient id="empty-ring-track" x1="0" y1="0" x2="1" y2="1"><stop stopColor="#455c60"/><stop offset=".5" stopColor="#2b393d"/><stop offset="1" stopColor="#43575a"/></linearGradient></defs>
             {(hasTimedActivity ? radii : [43]).map(radius => <circle key={radius} cx="50" cy="50" r={radius} fill="none" stroke={hasTimedActivity ? '#304045' : 'url(#empty-ring-track)'} strokeWidth="5.5"/>)}
-            {timeline.slices.filter(slice => slice.category === 'activity' || slice.category === 'break').map(slice => {
-              const lane = slice.category === 'break' ? 2 : Math.max(0, laneNames.indexOf(slice.name)) % radii.length;
+            {timeline.slices.filter(slice => slice.category === 'activity' || slice.category === 'break' || slice.category === 'travel').map(slice => {
+              const lane = slice.category === 'break' ? 2 : slice.category === 'travel' ? 1 : Math.max(0, laneNames.indexOf(slice.name)) % radii.length;
               const radius = radii[lane];
               const circumference = 2 * Math.PI * radius;
               const arc = ringArc(slice.startedAt, slice.milliseconds, timeline.dayStartedAt, timeline.dayMilliseconds, circumference);
@@ -87,7 +87,7 @@ export function TodayActivityRing({ state, now, dayKey = localDayKey(now), onOpe
       {!hasActivity && <div className="mx-auto mt-4 max-w-sm text-center"><p className="text-sm text-[#aebec1]">{isToday ? 'Your first session will light up this ring.' : 'No activity was recorded for this day.'}</p>{isToday && <button type="button" onClick={onOpenTimer} className="mt-4 rounded-full bg-[#7ec8d5] px-6 py-3 text-sm font-bold text-[#102026] hover:bg-[#a4dce4]">Start tracking →</button>}</div>}
       <div className="min-w-0">
         <h3 className="sr-only">Activity breakdown</h3>
-        <ul className="mt-4 flex flex-wrap items-center justify-center gap-x-5 gap-y-2">{[...legend.values()].filter(item => item.category === 'activity' || item.category === 'unscheduled' || item.category === 'break').map(item => <li key={`${item.category}:${item.name}`}><button type="button" disabled={item.category === 'unscheduled'} className="flex items-center gap-2 text-left disabled:cursor-default disabled:opacity-100" onClick={() => {
+        <ul className="mt-4 flex flex-wrap items-center justify-center gap-x-5 gap-y-2">{[...legend.values()].filter(item => item.category === 'activity' || item.category === 'unscheduled' || item.category === 'break' || item.category === 'travel').map(item => <li key={`${item.category}:${item.name}`}><button type="button" disabled={item.category === 'unscheduled'} className="flex items-center gap-2 text-left disabled:cursor-default disabled:opacity-100" onClick={() => {
           const slice = timeline.slices.find(candidate => candidate.category === item.category && candidate.name === item.name);
           setSelectedId(slice?.id ?? null);
         }}><span aria-hidden="true" className="size-2.5 shrink-0 rounded-full" style={{ backgroundColor: item.color }}/><span className="min-w-0 truncate text-xs text-[#94a9c4]">{item.name}</span></button></li>)}</ul>

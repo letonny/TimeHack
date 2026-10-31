@@ -11,7 +11,7 @@ function validSession(value: unknown, active: boolean, legacy: boolean): value i
         return false;
     let previous = s.startedAt!;
     return s.segments.every((segment, index) => {
-        if (!segment || (!legacy && segment.kind !== 'study' && segment.kind !== 'break') || !timestamp(segment.startedAt) || segment.startedAt < previous)
+        if (!segment || (!legacy && !['study', 'break', 'travel_out', 'travel_return'].includes(segment.kind)) || !timestamp(segment.startedAt) || segment.startedAt < previous)
             return false;
         if (segment.endedAt === null)
             return active && index === s.segments.length - 1;
