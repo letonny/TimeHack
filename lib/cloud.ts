@@ -1,3 +1,4 @@
+import { validateSessionSize } from './session-limits.ts';
 import { emptyState, type Activity, type Habit, type HabitReminder, type Profile, type Session, type SessionSet, type TimerState, type Weekday } from './timer.ts';
 import { validateReminder } from './reminders.ts';
 
@@ -43,10 +44,29 @@ export function sameCache(left: CloudCache, right: CloudCache): boolean {
   return JSON.stringify(canonical(hydrated(left))) === JSON.stringify(canonical(hydrated(right)));
 }
 export function nextChange(cache: CloudCache, entityType: Change['entityType'], entityId: string, action: Change['action'], payload: Change['payload'], operation?: Change['operation']): Change {
+  if (entityType === 'session' && operation !== 'correct') validateSessionSize(payload);
   const key = revisionKey(entityType, entityId);
   return { eventId: crypto.randomUUID(), entityType, entityId, action,
     expectedRevision: (cache.revisions[key] ?? 0) + cache.queue.filter(item => item.entityType === entityType && item.entityId === entityId).length,
     payload, occurredAt: new Date().toISOString(), ...(operation ? { operation } : {}) };
+}
+// Upload the stored envelope verbatim, including legacy payloads. Only a
+// successful acknowledgement can advance this owner's current queue head.
+export async function replayHead(cache: CloudCache, upload: (change: Change) => Promise<number>,
+  current: () => CloudCache | null, save: (updated: CloudCache) => void) {
+  const head = cache.queue[0];
+  const revision = await upload(head);
+  const latest = current();
+  if (latest?.userId !== cache.userId || latest.queue[0]?.eventId !== head.eventId) return false;
+  save({ ...latest, queue: latest.queue.slice(1),
+    revisions: { ...latest.revisions, [revisionKey(head.entityType, head.entityId)]: revision } });
+  return true;
+}
+
+export function accountBackup(storage: Pick<Storage, 'getItem'>, userId: string) {
+  const raw = storage.getItem(cloudKey(userId));
+  if (!raw || JSON.parse(raw).userId !== userId) throw new Error('Account backup unavailable');
+  return raw;
 }
 export function sessionChanges(before: Session | null, after: Session | null): Pick<Change, 'entityType' | 'entityId' | 'action' | 'payload' | 'operation'>[] {
   if (!after) return [];

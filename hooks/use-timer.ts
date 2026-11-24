@@ -10,7 +10,8 @@ import { removeCompletedSession, replaceCompletedSession } from '@/lib/session-a
 import { loadState, STORAGE_KEY } from '@/lib/storage';
 import { createClient } from '@/lib/supabase/client';
 import { applyChange, fetchCloud, SyncError } from '@/lib/cloud-repository';
-import { canOfferImport, cloudKey, LEGACY_CLAIM_KEY, newCache, nextChange, readCache, revisionKey, sameCache, writeCache, type Change, type CloudCache } from '@/lib/cloud';
+import { SessionLimitError } from '@/lib/session-limits';
+import { accountBackup, replayHead, canOfferImport, cloudKey, LEGACY_CLAIM_KEY, newCache, nextChange, readCache, revisionKey, sameCache, writeCache, type Change, type CloudCache } from '@/lib/cloud';
 import { correctionAvailability, validateIntervalCorrection, type IntervalCorrection } from '@/lib/session-corrections';
 
 /** Sanitized user-facing label for a sync error, with no server internals. */
@@ -23,6 +24,8 @@ function syncErrorMessage(err: unknown): string {
         return 'A permission error prevented synchronization. Try signing out and back in.';
       case 'conflict':
         return 'Another device changed this record. Pending changes remain saved on this device. Choose the cloud version only after reviewing the conflict.';
+      case 'session_limit':
+        return 'The server rejected an older session because of its size. Later changes are waiting. Download your account backup and keep it private. Retry after a compatible server is available.';
       case 'invalid':
         return err.operation === 'replay'
           ? `A pending ${err.entityType ?? 'account'} change was rejected by the server. It remains saved on this device so it can be recovered and retried.`
@@ -80,6 +83,7 @@ export function useTimer() {
   const cacheRef = useRef<CloudCache | null>(null);
   const userRef = useRef<string | null>(null);
   const clientRef = useRef<SupabaseClient | null>(null);
+  const pausedHead = useRef<string | null>(null);
   const busyRef = useRef(false);
   const correctionRef = useRef(false);
   const correctionEventsRef = useRef(new Map<string, string>());
@@ -97,18 +101,16 @@ export function useTimer() {
     const sync = async () => {
       const userId = userRef.current;
       if (!userId || busyRef.current || !cacheRef.current || conflictRef.current) return;
+      if (pausedHead.current && pausedHead.current === cacheRef.current.queue[0]?.eventId) return;
       busyRef.current = true;
       if (mounted) setSyncing(true);
       try {
         while (cacheRef.current?.queue.length && userRef.current === userId) {
-          const change = cacheRef.current.queue[0];
-          const revision = await applyChange(client, change);
-          const latest = readCache(window.localStorage, userId) ?? cacheRef.current;
-          if (!latest || latest.queue[0]?.eventId !== change.eventId) continue;
-          latest.revisions[revisionKey(change.entityType, change.entityId)] = revision;
-          latest.queue.shift();
-          writeCache(window.localStorage, latest);
-          publish(latest);
+          const cache = cacheRef.current;
+          const advanced = await replayHead(cache, change => applyChange(client, change),
+            () => userRef.current === userId ? readCache(window.localStorage, userId) : null,
+            latest => { writeCache(window.localStorage, latest); publish(latest); });
+          if (!advanced) return;
         }
         if (userRef.current !== userId) return;
         const remote = await fetchCloud(client, userId);
@@ -119,7 +121,8 @@ export function useTimer() {
         }
         if (mounted) setSyncError('');
       } catch (cause) {
-        if (!mounted) return;
+        if (!mounted || userRef.current !== userId) return;
+        if (cause instanceof SyncError && cause.kind === 'session_limit') pausedHead.current = cause.eventId ?? null;
         logSyncDiagnostic(cause, cacheRef.current?.queue.length ?? 0);
         const stale = cause instanceof SyncError
           ? cause.kind === 'conflict'
@@ -192,7 +195,8 @@ export function useTimer() {
       cacheRef.current = updated; setState(normalized); setPending(updated.queue.length); setNow(Date.now()); setError('');
       void syncRef.current();
       return true;
-    } catch {
+    } catch (cause) {
+      if (cause instanceof SessionLimitError) { setError(cause.message); return false; }
       setError('Your change could not be saved on this device. Check browser storage permissions or available space.');
       return false;
     }
@@ -240,16 +244,17 @@ export function useTimer() {
       if (!count) { setLegacyAvailable(false); return; }
       if (!window.confirm(`Import ${legacy.habits.length} habits and ${legacy.completed.length + (legacy.active ? 1 : 0)} sessions from this browser? They may belong to someone else who used this browser. Confirm only if they are yours. Original browser data will remain untouched.`)) return;
       if (!canOfferImport(window.localStorage, userId, true)) throw new Error('Browser data claimed by another account');
-      window.localStorage.setItem(LEGACY_CLAIM_KEY, userId);
       const queue = [
         ...legacy.habits.map(habit => nextChange(cache, 'habit', habit.id, 'import', habit)),
         ...[...legacy.completed, ...(legacy.active ? [legacy.active] : [])].map(session => nextChange(cache, 'session', session.id, 'import', session)),
       ];
+      window.localStorage.setItem(LEGACY_CLAIM_KEY, userId);
       const updated = { ...cache, state: legacy, revisions: {}, queue };
       writeCache(window.localStorage, updated);
       cacheRef.current = updated; setState(legacy); setPending(queue.length); setReady(true); setLegacyAvailable(false);
       void syncRef.current();
-    } catch {
+    } catch (cause) {
+      if (cause instanceof SessionLimitError) { setSyncError(cause.message); return; }
       setSyncError('Import could not start. Browser data remains untouched; check its validity and storage permissions.');
     }
   }
@@ -314,7 +319,18 @@ export function useTimer() {
     } finally { busyRef.current = false; correctionRef.current = false; setSyncing(false); }
   }
   return { state, now, ready: ready && !conflict, error, syncError, syncing, pending, legacyAvailable, legacyPreview, conflict, revisions,
-    retry: () => { if (!userRef.current) window.location.reload(); else { conflictRef.current = false; setConflict(false); void syncRef.current(); } },
+    downloadBackup: () => {
+      const owner = userRef.current;
+      if (!owner) return;
+      try {
+        const raw = accountBackup(window.localStorage, owner);
+        const url = URL.createObjectURL(new Blob([raw], { type: 'application/json' }));
+        const link = document.createElement('a');
+        link.href = url; link.download = `timehack-account-${owner}.json`; link.click();
+        window.setTimeout(() => URL.revokeObjectURL(url), 60000);
+      } catch { setError('Could not download the account backup. Check browser storage and retry.'); }
+    },
+    retry: () => { pausedHead.current = null; if (!userRef.current) window.location.reload(); else { conflictRef.current = false; setConflict(false); void syncRef.current(); } },
     previewLegacy, importLegacy, useCloudVersion,
     correctIntervals,
     start: (name: string) => { const id = crypto.randomUUID(); return sessionUpdate((current, time) => { const activity = activityForName(current, name); return start(current, name, time, id, activity.id || null, activity.countsProductive !== false); }, id); },

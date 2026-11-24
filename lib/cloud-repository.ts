@@ -7,6 +7,7 @@ export type SyncErrorKind =
   | 'permission'
   | 'conflict'
   | 'invalid'
+  | 'session_limit'
   | 'schema'
   | 'missing_segments'
   | 'network'
@@ -173,7 +174,9 @@ export async function applyChange(client: SupabaseClient, change: Change): Promi
     p_occurred_at: change.occurredAt,
   });
   if (error) {
-    const kind = classifyServerError(error);
+    const isLimit = rpcName === 'apply_timehack_classified_change' && change.entityType === 'session'
+      && error.code === '22023' && ['session payload exceeds 1 MiB', 'session exceeds 1000 segments'].includes(error.message);
+    const kind = isLimit ? 'session_limit' : classifyServerError(error);
     const code = ('code' in error && typeof error.code === 'string') ? error.code : undefined;
     throw new SyncError(
       `Cloud change replay failed for ${change.entityType} (${kind})`,

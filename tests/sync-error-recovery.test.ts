@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { applyChange, fetchCloud, SyncError } from '../lib/cloud-repository.ts';
-import { mapRows, newCache, nextChange, readCache, revisionKey, writeCache, type Change } from '../lib/cloud.ts';
+import { sessionPayloadBytes } from '../lib/session-limits.ts';
+import { accountBackup, replayHead, mapRows, newCache, nextChange, readCache, revisionKey, writeCache, type Change } from '../lib/cloud.ts';
 import { emptyState } from '../lib/timer.ts';
 
 const cloudTableColumns: Record<string, Set<string>> = {
@@ -233,4 +234,50 @@ test('SyncError metadata never requires storing a failed private payload', () =>
   });
   assert.equal('payload' in error, false);
   assert.ok(!JSON.stringify(error).includes('Private'));
+});
+
+test('new offline session commands enforce JSONB byte and segment boundaries before enqueue', () => {
+  const cache = newCache('alice');
+  const make = (payload: object) => nextChange(cache, 'session', 's', 'save', payload as Change['payload']);
+  const segments = Array.from({ length: 1000 }, (_, i) => ({ kind: 'study' as const, startedAt: i, endedAt: i + 1 }));
+  make({ segments });
+  assert.throws(() => make({ segments: [...segments, segments[0]] }), /1,000/);
+  const metadata = { segments: [], sets: [{ description: 'é😀,:', v: -1.2e-7 }] };
+  const expected = '{"sets": [{"v": -0.00000012, "description": "é😀,:"}], "segments": []}';
+  assert.equal(sessionPayloadBytes(metadata), Buffer.byteLength(expected));
+  const note = 'x'.repeat(1048576 - sessionPayloadBytes({ ...metadata, note: '' }));
+  make({ ...metadata, note });
+  assert.throws(() => make({ ...metadata, note: note + 'x' }), /1 MiB/);
+  assert.deepEqual(cache.queue, []);
+});
+
+test('oversized legacy head survives rejection and export, then retries exactly before its successor', async () => {
+  const storage = memory();
+  const cache = newCache('alice');
+  const head = nextChange(cache, 'session', 's', 'save', {});
+  head.payload = { id: 's', name: 'Old session', startedAt: 0, endedAt: 1001,
+    segments: Array.from({ length: 1001 }, (_, i) => ({ kind: 'study' as const, startedAt: i, endedAt: i + 1 })),
+    sets: [{ id: 'child', sessionId: 's', description: 'Lift', segments: [{ startedAt: 1, endedAt: 2 }] }] };
+  cache.queue.push(head);
+  const later = nextChange(cache, 'session', 's', 'delete', {});
+  cache.queue.push(later);
+  writeCache(storage, cache);
+  const read = () => readCache(storage, 'alice')!;
+  const save = (updated: typeof cache) => writeCache(storage, updated);
+  const baseline = accountBackup(storage, 'alice');
+  assert.throws(() => accountBackup(storage, 'bob'));
+  const rejected = mockClient({ rpcError: { code: '22023', message: 'session exceeds 1000 segments' } });
+  await assert.rejects(replayHead(read(), change => applyChange(rejected.client, change), read, save),
+    e => e instanceof SyncError && e.kind === 'session_limit');
+  assert.equal(accountBackup(storage, 'alice'), baseline);
+  const accepted = mockClient({ rpcRevision: 1 });
+  assert.equal(await replayHead(read(), change => applyChange(accepted.client, change), () => newCache('bob'), save), false);
+  assert.equal(accountBackup(storage, 'alice'), baseline);
+  await replayHead(read(), change => applyChange(accepted.client, change), read, save);
+  assert.deepEqual(rejected.rpcs[0], accepted.rpcs[1]);
+  assert.deepEqual(read().queue, [later]);
+  assert.equal(read().revisions['session:s'], 1);
+  await replayHead(read(), async change => { assert.deepEqual(change, later); return 2; }, read, save);
+  assert.deepEqual(read().queue, []);
+  assert.equal(read().revisions['session:s'], 2);
 });
